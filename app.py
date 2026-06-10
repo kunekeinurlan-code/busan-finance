@@ -28,9 +28,10 @@ def border_thin():
 
 CATEGORIES = {
     "Перевод собственнику": ["карту kaspi gold","kaspi gold *"],
+    "Выручка Kaspi.kz":    ["продажи с kaspi.kz","возмещение коммерсанту","kaspi магазин","kaspi pay"],
     "Зарплата / доход":    ["зарплат","salary","оклад","выплата зарплат","начисление зарплат"],
-    "Доход от клиентов":   ["клиент","оплат","консалт","услуг","гонорар","вознагражд"],
-    "Переводы входящие":   ["перевод","transfer","пополнен"],
+    "Доход от клиентов":   ["поступление от клиент","оплата от клиент","консалтинг","гонорар","вознагражд","выручка"],
+    "Переводы входящие":   ["пополнен"],
     "Налоги / взносы":     ["налог","ипн","соц","пенсион","опв","снп","осмс","источника выплаты","облагаемых","пп рк","единый совокупный"],
     "Аренда":              ["аренд","rent","найм"],
     "Продукты / питание":  ["магазин","супермарк","продукт","еда","food","market","magnum","small"],
@@ -41,7 +42,7 @@ CATEGORIES = {
     "Образование":         ["курс","обучен","образован","школ","универс","тренинг","семинар"],
     "Здоровье / медицина": ["аптек","клиник","больниц","медицин","pharmacy","dental","стомат"],
     "Красота / уход":      ["салон","beauty","spa","cosmetic","косметик"],
-    "Банковские расходы":  ["комисси","обслуживан","штраф","пени"],
+    "Банковские расходы":  ["комисси","обслуживан","штраф","пени","оплата за информационно","оплата услуги по обработке","оплата услуг по обработке"],
     "IT / сервисы":        ["it","разработк","программ","software","хостинг"],
     "Инвестиции":          ["инвестиц","депозит","брокер","акци","облигац"],
 }
@@ -343,11 +344,14 @@ def build_analytics(all_transactions):
     monthly_sorted = [{"month": m, "income": clean(v["income"]), "expense": clean(v["expense"])}
                       for m, v in sorted(monthly.items())]
 
+    # Категории которые никогда не бывают расходами
+    INCOME_ONLY_CATS = {"Зарплата / доход", "Доход от клиентов", "Выручка Kaspi.kz", "Переводы входящие"}
+
     # Расходы по категориям и месяцам
     months_list = [m["month"] for m in monthly_sorted]
     cat_monthly = defaultdict(lambda: defaultdict(float))
-    for t in all_transactions:  # Все категории в таблице
-        if t["type"] == "expense":
+    for t in all_transactions:
+        if t["type"] == "expense" and not t.get("internal") and t["category"] not in INCOME_ONLY_CATS:
             cat_monthly[t["category"]][t["month"]] += t["debit"]
 
     cat_monthly_table = []
@@ -359,10 +363,16 @@ def build_analytics(all_transactions):
         cat_monthly_table.append(row)
     cat_monthly_table.sort(key=lambda x: -x["total"])
 
+    # Категории которые никогда не бывают поступлениями
+    EXPENSE_ONLY_CATS = {"Налоги / взносы", "Аренда", "Транспорт", "Банковские расходы",
+                         "Связь / интернет", "Подписки / сервисы", "Образование",
+                         "Здоровье / медицина", "Красота / уход", "IT / сервисы",
+                         "Перевод собственнику", "Внутренний перевод"}
+
     # Поступления по категориям
     cat_income_data = defaultdict(float)
     for t in all_transactions:
-        if t["type"] == "income" and not t.get("internal"):
+        if t["type"] == "income" and not t.get("internal") and t["category"] not in EXPENSE_ONLY_CATS:
             cat_income_data[t["category"]] += t["credit"]
     cat_income_table = sorted(
         [{"category": cat, "total": clean(amt),
