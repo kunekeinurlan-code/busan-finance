@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUSAN FINANCE — Cashflow</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--navy:#1A1A2E;--navy2:#16213E;--gold:#D4A017;--gold-l:#F0C040;--cream:#F8F6F0;--white:#fff;--green:#27AE60;--red:#E74C3C;--amber:#F39C12;--text:#1A1A2E;--muted:#6B7280;--border:#E5E7EB;--surf:#F9F8F5}
+body{font-family:'Segoe UI',-apple-system,sans-serif;background:var(--cream);color:var(--text);min-height:100vh}
+header{background:var(--navy);padding:0 32px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;border-bottom:1px solid rgba(212,160,23,.3)}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-mark{width:32px;height:32px;background:var(--gold);border-radius:7px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:var(--navy)}
+.logo-name{font-size:14px;font-weight:700;color:#fff;letter-spacing:.3px}
+.logo-sub{font-size:9px;color:var(--gold);letter-spacing:2px}
+.header-right{display:flex;align-items:center;gap:12px}
+.badge{font-size:10px;color:var(--gold);border:1px solid rgba(212,160,23,.4);padding:3px 10px;border-radius:12px}
+.btn-logout{background:transparent;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer;display:none}
+.btn-logout:hover{border-color:rgba(255,255,255,.5);color:#fff}
+main{max-width:1100px;margin:0 auto;padding:32px 20px 80px}
+
+/* LOGIN */
+#loginSection{display:flex;align-items:center;justify-content:center;min-height:70vh}
+.login-card{background:var(--white);border:1px solid var(--border);border-radius:16px;padding:48px 40px;text-align:center;width:100%;max-width:400px}
+.login-icon{font-size:40px;margin-bottom:16px}
+.login-title{font-size:22px;font-weight:700;color:var(--navy);margin-bottom:8px}
+.login-sub{font-size:13px;color:var(--muted);margin-bottom:28px}
+.login-input{width:100%;padding:12px 16px;border:1px solid var(--border);border-radius:8px;font-size:15px;outline:none;text-align:center;letter-spacing:4px;font-family:monospace}
+.login-input:focus{border-color:var(--gold)}
+.btn-login{width:100%;margin-top:14px;background:var(--navy);color:var(--gold);border:none;border-radius:8px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.5px}
+.btn-login:hover{background:var(--navy2)}
+.login-err{color:var(--red);font-size:12px;margin-top:8px;display:none}
+
+/* DB BANNER */
+.db-banner{background:var(--navy);border-radius:10px;padding:14px 20px;margin-bottom:20px;display:none;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.db-banner-info{color:#fff;font-size:13px}
+.db-banner-info span{color:var(--gold);font-weight:700}
+.db-banner-actions{display:flex;gap:8px}
+.btn-sm{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none}
+.btn-view-db{background:var(--gold);color:var(--navy)}
+.btn-clear-db{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2)!important}
+.btn-clear-db:hover{background:rgba(231,76,60,.3)}
+
+/* UPLOAD */
+.upload-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:40px 32px;text-align:center;margin-bottom:20px}
+.upload-title{font-size:20px;font-weight:700;color:var(--navy);margin-bottom:6px}
+.upload-desc{font-size:13px;color:var(--muted);margin-bottom:20px}
+.bank-tags{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:20px}
+.tag{padding:4px 12px;border-radius:12px;font-size:11px;font-weight:600;border:1.5px solid}
+.tag.k{background:#FEF2F2;color:#DC2626;border-color:#FCA5A5}
+.tag.h{background:#F0FDF4;color:#16A34A;border-color:#86EFAC}
+.tag.f{background:#EFF6FF;color:#2563EB;border-color:#93C5FD}
+.tag.o{background:var(--surf);color:var(--muted);border-color:var(--border)}
+.drop-zone{border:2px dashed var(--border);border-radius:10px;padding:28px;cursor:pointer;background:var(--surf);position:relative;transition:all .2s}
+.drop-zone:hover,.drop-zone.has-files{border-color:var(--gold);background:#FDFBF4}
+.drop-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.drop-text{font-size:13px;color:var(--muted)}
+.drop-text span{color:var(--gold);font-weight:600}
+.file-list{margin-top:10px;text-align:left}
+.file-item{display:flex;align-items:center;gap:8px;padding:7px 12px;background:var(--white);border:1px solid var(--border);border-radius:7px;margin-top:5px;font-size:12px}
+.file-item .fn{flex:1;font-weight:500}
+.file-item .rm{color:var(--muted);cursor:pointer;font-size:14px}
+.file-item .rm:hover{color:var(--red)}
+
+/* MODE TOGGLE */
+.mode-row{display:flex;gap:10px;justify-content:center;margin-top:18px;flex-wrap:wrap}
+.mode-btn{padding:8px 18px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:var(--white);color:var(--muted);transition:all .15s}
+.mode-btn.active{border-color:var(--navy);background:var(--navy);color:var(--gold)}
+
+.btn-analyze{margin-top:18px;background:var(--navy);color:var(--gold);border:none;border-radius:9px;padding:13px 36px;font-size:14px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:7px;transition:all .2s}
+.btn-analyze:hover{background:var(--navy2)}
+.btn-analyze:disabled{opacity:.4;cursor:not-allowed}
+.err-box{background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:12px 16px;color:#DC2626;font-size:13px;margin-top:12px;display:none}
+
+/* LOADING */
+#loading{display:none;text-align:center;padding:60px 0}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* RESULTS */
+#results{display:none}
+.results-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px}
+.results-title{font-size:18px;font-weight:700;color:var(--navy)}
+.results-meta{font-size:12px;color:var(--muted);margin-top:2px}
+.btn-dl{background:var(--gold);color:var(--navy);border:none;border-radius:7px;padding:9px 18px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px}
+.btn-dl:hover{background:var(--gold-l)}
+.btn-back{background:transparent;border:1px solid var(--border);border-radius:7px;padding:8px 14px;font-size:12px;color:var(--muted);cursor:pointer}
+.btn-back:hover{border-color:var(--navy);color:var(--navy)}
+.added-badge{background:#F0FDF4;border:1px solid #86EFAC;color:#15803D;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;display:none}
+
+/* KPI */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:18px}
+.kpi{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:18px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--navy)}
+.kpi.inc::before{background:var(--green)}.kpi.exp::before{background:var(--red)}.kpi.net::before{background:var(--gold)}
+.kpi-lbl{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.kpi-val{font-size:18px;font-weight:800;color:var(--navy)}
+.kpi-val.g{color:var(--green)}.kpi-val.r{color:var(--red)}
+.kpi-sub{font-size:11px;color:#9CA3AF;margin-top:3px}
+
+/* SECTIONS */
+.sec{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px}
+.sec-title{font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--gold);flex-shrink:0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:680px){.two{grid-template-columns:1fr}}
+.chart-wrap{position:relative;height:210px}
+
+/* BAR LIST */
+.bar-list{display:flex;flex-direction:column;gap:8px}
+.bar-row2{display:flex;justify-content:space-between;margin-bottom:3px;font-size:11px}
+.bar-lbl{color:var(--text);font-weight:500}.bar-amt{color:var(--muted);font-weight:600}
+.bar-track{height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;border-radius:3px;background:var(--red)}
+
+/* CAT/MONTH TABLE */
+.tbl-wrap{overflow-x:auto}
+.cat-table{width:100%;border-collapse:collapse;font-size:11px;min-width:600px}
+.cat-table th{background:var(--navy);color:var(--gold);padding:7px 10px;text-align:right;font-size:10px;font-weight:600;white-space:nowrap}
+.cat-table th:first-child{text-align:left}
+.cat-table td{padding:7px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+.cat-table td:first-child{text-align:left;font-weight:600;color:var(--navy)}
+.cat-table tr:nth-child(even) td{background:var(--surf)}
+.cat-table .total-col{font-weight:700;color:var(--red)}
+.cat-table .share-col{color:var(--muted)}
+.cat-table .heat-high{background:#FEE2E2!important;color:#DC2626;font-weight:700}
+.cat-table .heat-mid{background:#FEF3C7!important;color:#92400E}
+
+/* MONTHLY TABLE */
+.m-table{width:100%;border-collapse:collapse;font-size:11px}
+.m-table th{background:var(--navy);color:var(--gold);padding:7px 10px;text-align:left;font-size:10px}
+.m-table td{padding:7px 10px;border-bottom:1px solid var(--border)}
+.m-table tr:nth-child(even) td{background:var(--surf)}
+.g{color:var(--green);font-weight:600}.r{color:var(--red);font-weight:600}
+
+/* BANKS */
+.bank-cards{display:flex;flex-wrap:wrap;gap:10px}
+.bank-card{flex:1;min-width:140px;background:var(--surf);border:1px solid var(--border);border-radius:9px;padding:14px}
+.bank-name{font-size:12px;font-weight:700;color:var(--navy);margin-bottom:8px}
+.bank-row{display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px}
+.bank-row span:first-child{color:var(--muted)}
+
+/* RECS */
+.rec-list{display:flex;flex-direction:column;gap:8px}
+.rec{display:flex;gap:10px;padding:12px 14px;border-radius:8px;border:1px solid}
+.rec.success{background:#F0FDF4;border-color:#86EFAC}
+.rec.warning{background:#FFFBEB;border-color:#FCD34D}
+.rec.danger{background:#FEF2F2;border-color:#FCA5A5}
+.rec.info{background:#EFF6FF;border-color:#93C5FD}
+.rec-icon{font-size:14px;flex-shrink:0}
+.rec-t{font-size:12px;font-weight:700;margin-bottom:2px}
+.rec-d{font-size:11px;color:var(--muted);line-height:1.4}
+.rec.success .rec-t{color:#15803D}.rec.warning .rec-t{color:#92400E}.rec.danger .rec-t{color:#DC2626}.rec.info .rec-t{color:#1D4ED8}
+footer{text-align:center;padding:20px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <div class="logo-mark">BF</div>
+    <div>
+      <div class="logo-name">BUSAN FINANCE</div>
+      <div class="logo-sub">CASHFLOW ANALYTICS</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="badge">KUNEKEI GROUP</span>
+    <button class="btn-logout" id="btnLogout" onclick="logout()">Выйти</button>
+  </div>
+</header>
+
+<main>
+
+<!-- LOGIN -->
+<div id="loginSection">
+  <div class="login-card">
+    <div class="login-icon">🔐</div>
+    <div class="login-title">BUSAN FINANCE</div>
+    <div class="login-sub">Введите пароль для доступа к системе</div>
+    <input class="login-input" type="password" id="pwdInput" placeholder="••••••••"
+           onkeydown="if(event.key==='Enter') doLogin()">
+    <button class="btn-login" onclick="doLogin()">Войти</button>
+    <div class="login-err" id="loginErr">Неверный пароль</div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appSection" style="display:none">
+
+  <!-- DB BANNER -->
+  <div class="db-banner" id="dbBanner">
+    <div class="db-banner-info">
+      💾 База данных: <span id="dbTotal">0</span> транзакций ·
+      обновлено <span id="dbUpdated">—</span> ·
+      периоды: <span id="dbMonths">—</span>
+    </div>
+    <div class="db-banner-actions">
+      <button class="btn-sm btn-view-db" onclick="viewDb()">📊 Показать отчёт</button>
+      <button class="btn-sm btn-clear-db" onclick="clearDb()">🗑 Очистить</button>
+    </div>
+  </div>
+
+  <!-- UPLOAD -->
+  <div class="upload-card" id="uploadSection">
+    <div class="upload-title">Загрузка выписок</div>
+    <div class="upload-desc">Загрузите выписки — система консолидирует данные и сформирует cashflow отчёт</div>
+    <div class="bank-tags">
+      <span class="tag k">Kaspi</span>
+      <span class="tag h">Halyk</span>
+      <span class="tag f">Freedom</span>
+      <span class="tag o">+ другие</span>
+    </div>
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" multiple accept=".xlsx,.xls">
+      <p class="drop-text">Перетащите файлы или <span>выберите</span></p>
+      <p class="drop-text" style="font-size:11px;opacity:.6;margin-top:4px">Форматы: .xlsx, .xls</p>
+      <div class="file-list" id="fileList"></div>
+    </div>
+
+    <div class="mode-row">
+      <button class="mode-btn active" id="modeAppend" onclick="setMode('append')">
+        ➕ Добавить к базе
+      </button>
+      <button class="mode-btn" id="modeReplace" onclick="setMode('replace')">
+        🔄 Заменить базу
+      </button>
+    </div>
+
+    <div class="err-box" id="errBox"></div>
+    <button class="btn-analyze" id="analyzeBtn" onclick="analyze()" disabled>⚡ Анализировать</button>
+  </div>
+
+  <!-- LOADING -->
+  <div id="loading"><div class="spinner"></div><p style="color:var(--muted);font-size:13px">Обрабатываем выписки...</p></div>
+
+  <!-- RESULTS -->
+  <div id="results">
+    <div class="results-hdr">
+      <div>
+        <div class="results-title">Cashflow отчёт</div>
+        <div class="results-meta" id="resultsMeta"></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div class="added-badge" id="addedBadge"></div>
+        <button class="btn-back" onclick="resetForm()">← Загрузить ещё</button>
+        <button class="btn-dl" onclick="downloadExcel()">⬇ Excel</button>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi inc"><div class="kpi-lbl">Доходы</div><div class="kpi-val g" id="kpiInc">—</div><div class="kpi-sub" id="kpiIncSub"></div></div>
+      <div class="kpi exp"><div class="kpi-lbl">Расходы</div><div class="kpi-val r" id="kpiExp">—</div></div>
+      <div class="kpi net"><div class="kpi-lbl">Чистый CF</div><div class="kpi-val" id="kpiNet">—</div><div class="kpi-sub" id="kpiNetSub"></div></div>
+      <div class="kpi"><div class="kpi-lbl">Транзакций в базе</div><div class="kpi-val" id="kpiTxn">—</div><div class="kpi-sub" id="kpiBanks"></div></div>
+    </div>
+
+    <div class="two">
+      <div class="sec"><div class="sec-title"><span class="dot"></span>Доходы / расходы по месяцам</div><div class="chart-wrap"><canvas id="monthlyChart"></canvas></div></div>
+      <div class="sec"><div class="sec-title"><span class="dot"></span>Структура расходов</div><div class="chart-wrap"><canvas id="pieChart"></canvas></div></div>
+    </div>
+
+    <!-- Таблица расходов по категориям и месяцам -->
+    <div class="sec">
+      <div class="sec-title"><span class="dot"></span>Расходы по категориям и месяцам</div>
+      <div class="tbl-wrap"><table class="cat-table" id="catMonthTable"></table></div>
+    </div>
+
+    <div class="two">
+      <div class="sec"><div class="sec-title"><span class="dot"></span>По банкам</div><div class="bank-cards" id="bankCards"></div></div>
+      <div class="sec"><div class="sec-title"><span class="dot"></span>Топ расходов</div><div class="bar-list" id="expBars"></div></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title"><span class="dot"></span>Динамика по месяцам</div>
+      <div style="overflow-x:auto">
+        <table class="m-table">
+          <thead><tr><th>Месяц</th><th>Доходы (₸)</th><th>Расходы (₸)</th><th>Чистый CF (₸)</th><th>Норма %</th></tr></thead>
+          <tbody id="monthlyBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="sec"><div class="sec-title"><span class="dot"></span>Рекомендации</div><div class="rec-list" id="recList"></div></div>
+  </div>
+
+</div><!-- /appSection -->
+</main>
+<footer>BUSAN FINANCE · KUNEKEI GROUP · Данные защищены · Файлы не хранятся на сервере</footer>
+
+<script>
+let files=[], mode='append', mChart=null, pChart=null;
+
+// ─── AUTH ────────────────────────────────────────────────────────────────────
+async function doLogin(){
+  const pwd = document.getElementById('pwdInput').value;
+  const r = await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pwd})});
+  const d = await r.json();
+  if(d.ok){
+    document.getElementById('loginSection').style.display='none';
+    document.getElementById('appSection').style.display='block';
+    document.getElementById('btnLogout').style.display='block';
+    loadDbStats();
+  } else {
+    document.getElementById('loginErr').style.display='block';
+  }
+}
+async function logout(){
+  await fetch('/logout',{method:'POST'});
+  location.reload();
+}
+
+// ─── DB ──────────────────────────────────────────────────────────────────────
+async function loadDbStats(){
+  try{
+    const r = await fetch('/db-stats');
+    if(!r.ok) return;
+    const d = await r.json();
+    if(d.total > 0){
+      document.getElementById('dbBanner').style.display='flex';
+      document.getElementById('dbTotal').textContent = d.total;
+      document.getElementById('dbUpdated').textContent = d.updated_at || '—';
+      document.getElementById('dbMonths').textContent = d.months.length > 0 ? d.months[0]+' — '+d.months[d.months.length-1] : '—';
+    }
+  }catch(e){}
+}
+async function viewDb(){
+  document.getElementById('uploadSection').style.display='none';
+  document.getElementById('loading').style.display='block';
+  document.getElementById('results').style.display='none';
+  const r = await fetch('/db-analyze');
+  const d = await r.json();
+  document.getElementById('loading').style.display='none';
+  if(d.error){ alert(d.error); document.getElementById('uploadSection').style.display='block'; return; }
+  renderResults(d);
+  document.getElementById('results').style.display='block';
+}
+async function clearDb(){
+  if(!confirm('Очистить всю накопленную базу данных?')) return;
+  await fetch('/db-clear',{method:'POST'});
+  document.getElementById('dbBanner').style.display='none';
+  alert('База очищена');
+}
+
+// ─── FILES ───────────────────────────────────────────────────────────────────
+document.getElementById('fileInput').addEventListener('change', e=>addFiles([...e.target.files]));
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e=>{e.preventDefault();dz.classList.add('has-files')});
+dz.addEventListener('dragleave', ()=>dz.classList.remove('has-files'));
+dz.addEventListener('drop', e=>{e.preventDefault();addFiles([...e.dataTransfer.files].filter(f=>f.name.match(/\.xlsx?$/i)))});
+
+function addFiles(f){ f.forEach(x=>{ if(!files.find(y=>y.name===x.name)) files.push(x); }); renderFiles(); }
+function removeFile(i){ files.splice(i,1); renderFiles(); }
+function renderFiles(){
+  document.getElementById('fileList').innerHTML = files.map((f,i)=>
+    `<div class="file-item">📄 <span class="fn">${f.name}</span><span class="rm" onclick="removeFile(${i})">✕</span></div>`
+  ).join('');
+  document.getElementById('analyzeBtn').disabled = files.length===0;
+  dz.classList.toggle('has-files', files.length>0);
+}
+function setMode(m){
+  mode=m;
+  document.getElementById('modeAppend').classList.toggle('active', m==='append');
+  document.getElementById('modeReplace').classList.toggle('active', m==='replace');
+}
+
+// ─── ANALYZE ─────────────────────────────────────────────────────────────────
+async function analyze(){
+  document.getElementById('errBox').style.display='none';
+  document.getElementById('uploadSection').style.display='none';
+  document.getElementById('loading').style.display='block';
+  document.getElementById('results').style.display='none';
+  const fd = new FormData();
+  files.forEach(f=>fd.append('files',f));
+  fd.append('mode', mode);
+  try{
+    const r = await fetch('/analyze',{method:'POST',body:fd});
+    const d = await r.json();
+    document.getElementById('loading').style.display='none';
+    if(!r.ok){
+      document.getElementById('uploadSection').style.display='block';
+      document.getElementById('errBox').textContent=d.error;
+      document.getElementById('errBox').style.display='block';
+      return;
+    }
+    renderResults(d);
+    document.getElementById('results').style.display='block';
+    loadDbStats();
+  }catch(e){
+    document.getElementById('loading').style.display='none';
+    document.getElementById('uploadSection').style.display='block';
+    document.getElementById('errBox').textContent='Ошибка соединения';
+    document.getElementById('errBox').style.display='block';
+  }
+}
+
+// ─── RENDER ──────────────────────────────────────────────────────────────────
+function fmt(n){ return new Intl.NumberFormat('ru-RU').format(Math.round(n||0)); }
+
+function renderResults(d){
+  const meta = [];
+  if(d.db_total) meta.push(`${d.db_total} транзакций в базе`);
+  if(d.db_updated) meta.push(`обновлено ${d.db_updated}`);
+  document.getElementById('resultsMeta').textContent = meta.join(' · ');
+
+  if(d.added > 0){
+    const ab = document.getElementById('addedBadge');
+    ab.textContent = `+${d.added} новых транзакций`;
+    ab.style.display='block';
+  }
+
+  document.getElementById('kpiInc').textContent = fmt(d.total_income)+' ₸';
+  document.getElementById('kpiIncSub').textContent = `${d.banks?.length||0} банк(а)`;
+  document.getElementById('kpiExp').textContent = fmt(d.total_expense)+' ₸';
+  const net = d.net_cashflow||0;
+  const kn = document.getElementById('kpiNet');
+  kn.textContent = (net>=0?'+':'')+fmt(net)+' ₸';
+  kn.className = 'kpi-val '+(net>=0?'g':'r');
+  const sr = d.total_income>0?Math.round(net/d.total_income*100):0;
+  document.getElementById('kpiNetSub').textContent = `Норма сбережений: ${sr}%`;
+  document.getElementById('kpiTxn').textContent = d.db_total||d.total;
+  document.getElementById('kpiBanks').textContent = (d.banks||[]).map(b=>b.bank).join(', ');
+
+  // Monthly chart
+  if(mChart) mChart.destroy();
+  mChart = new Chart(document.getElementById('monthlyChart').getContext('2d'),{
+    type:'bar',
+    data:{labels:d.monthly.map(m=>m.month),datasets:[
+      {label:'Доходы',data:d.monthly.map(m=>Math.round(m.income)),backgroundColor:'rgba(39,174,96,.75)',borderRadius:3},
+      {label:'Расходы',data:d.monthly.map(m=>Math.round(m.expense)),backgroundColor:'rgba(231,76,60,.75)',borderRadius:3},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{font:{size:10},boxWidth:10}}},
+      scales:{x:{grid:{display:false},ticks:{font:{size:9}}},
+              y:{grid:{color:'#F3F4F6'},ticks:{font:{size:9},callback:v=>v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?(v/1000)+'K':v}}}}
+  });
+
+  // Pie chart
+  if(pChart) pChart.destroy();
+  const colors=['#E74C3C','#E67E22','#F39C12','#27AE60','#2980B9','#8E44AD','#1ABC9C','#D35400'];
+  pChart = new Chart(document.getElementById('pieChart').getContext('2d'),{
+    type:'doughnut',
+    data:{labels:d.top_expenses.map(e=>e.category),datasets:[{data:d.top_expenses.map(e=>Math.round(e.amount)),backgroundColor:colors,borderWidth:0,hoverOffset:4}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'60%',
+      plugins:{legend:{position:'right',labels:{font:{size:9},boxWidth:9,padding:6}}}}
+  });
+
+  // Cat/month table
+  const months = d.months||[];
+  const tbl = document.getElementById('catMonthTable');
+  let html = '<thead><tr><th>Категория</th>';
+  months.forEach(m=>html+=`<th>${m}</th>`);
+  html += '<th>ИТОГО</th><th>Уд. вес %</th></tr></thead><tbody>';
+  const maxAmt = d.cat_monthly&&d.cat_monthly[0]?d.cat_monthly[0].total:1;
+  (d.cat_monthly||[]).forEach(row=>{
+    const share = row.share||0;
+    const cls = share>20?'heat-high':share>10?'heat-mid':'';
+    html+=`<tr><td>${row.category}</td>`;
+    months.forEach(m=>{ const v=row[m]||0; html+=`<td>${v>0?fmt(v):''}</td>`; });
+    html+=`<td class="total-col ${cls}">${fmt(row.total)}</td><td class="share-col">${share}%</td></tr>`;
+  });
+  html+='</tbody>'; tbl.innerHTML=html;
+
+  // Banks
+  document.getElementById('bankCards').innerHTML=(d.banks||[]).map(b=>{
+    const n=b.income-b.expense;
+    return `<div class="bank-card"><div class="bank-name">🏦 ${b.bank}</div>
+      <div class="bank-row"><span>Доходы</span><span class="g">${fmt(b.income)} ₸</span></div>
+      <div class="bank-row"><span>Расходы</span><span class="r">${fmt(b.expense)} ₸</span></div>
+      <div class="bank-row"><span>CF</span><span class="${n>=0?'g':'r'}">${n>=0?'+':''}${fmt(n)} ₸</span></div>
+      <div class="bank-row"><span>Операций</span><span>${b.count}</span></div></div>`;
+  }).join('');
+
+  // Bars
+  const mx=(d.top_expenses[0]?.amount||1);
+  document.getElementById('expBars').innerHTML=(d.top_expenses||[]).map(e=>{
+    const p=Math.round(e.amount/mx*100);
+    return `<div><div class="bar-row2"><span class="bar-lbl">${e.category}</span><span class="bar-amt">${fmt(e.amount)} ₸</span></div>
+    <div class="bar-track"><div class="bar-fill" style="width:${p}%"></div></div></div>`;
+  }).join('');
+
+  // Monthly table
+  document.getElementById('monthlyBody').innerHTML=(d.monthly||[]).map(m=>{
+    const n=m.income-m.expense; const p=m.income>0?Math.round(n/m.income*100):0;
+    return `<tr><td><strong>${m.month}</strong></td><td class="g">${fmt(m.income)}</td>
+      <td class="r">${fmt(m.expense)}</td>
+      <td class="${n>=0?'g':'r'}">${n>=0?'+':''}${fmt(n)}</td>
+      <td style="color:${n>=0?'#27AE60':'#E74C3C'}">${p}%</td></tr>`;
+  }).join('');
+
+  // Recs
+  const icons={check:'✅',alert:'🔴',info:'ℹ️',trend:'📈'};
+  document.getElementById('recList').innerHTML=(d.recommendations||[]).map(r=>
+    `<div class="rec ${r.type}"><span class="rec-icon">${icons[r.icon]||'ℹ️'}</span>
+    <div><div class="rec-t">${r.title}</div><div class="rec-d">${r.text}</div></div></div>`
+  ).join('');
+}
+
+function downloadExcel(){ window.location.href='/download-excel'; }
+function resetForm(){
+  files=[];
+  document.getElementById('fileList').innerHTML='';
+  document.getElementById('uploadSection').style.display='block';
+  document.getElementById('results').style.display='none';
+  document.getElementById('analyzeBtn').disabled=true;
+  document.getElementById('addedBadge').style.display='none';
+  dz.classList.remove('has-files');
+}
+</script>
+</body>
+</html>
