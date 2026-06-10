@@ -1,4 +1,3 @@
-
 from flask import Flask, request, jsonify, send_file, send_from_directory
 import os, json, io
 from datetime import datetime
@@ -282,6 +281,19 @@ def analyze():
 
     # Рекомендации
     recommendations = generate_recommendations(all_transactions, total_inc, total_exp, net, cat_exp, monthly_sorted)
+
+    # Очищаем NaN значения
+    import math
+    def clean(v):
+        if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+            return 0.0
+        return v
+
+    total_inc  = clean(total_inc)
+    total_exp  = clean(total_exp)
+    net        = clean(net)
+    banks_list = [{k: clean(v) if isinstance(v, float) else v for k,v in b.items()} for b in banks_list]
+    monthly_sorted = [{k: clean(v) if isinstance(v, float) else v for k,v in m.items()} for m in monthly_sorted]
 
     # Сохраняем транзакции для Excel
     import json as _json
