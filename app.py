@@ -28,10 +28,10 @@ def border_thin():
 
 CATEGORIES = {
     "Перевод собственнику": ["карту kaspi gold","kaspi gold *"],
-    "Зарплата / доход":    ["зарплат","salary","оклад","выплат","начислен"],
+    "Зарплата / доход":    ["зарплат","salary","оклад","выплата зарплат","начисление зарплат"],
     "Доход от клиентов":   ["клиент","оплат","консалт","услуг","гонорар","вознагражд"],
     "Переводы входящие":   ["перевод","transfer","пополнен"],
-    "Налоги / взносы":     ["налог","ипн","соц","пенсион","опв","снп","осмс"],
+    "Налоги / взносы":     ["налог","ипн","соц","пенсион","опв","снп","осмс","источника выплаты","облагаемых","пп рк","единый совокупный"],
     "Аренда":              ["аренд","rent","найм"],
     "Продукты / питание":  ["магазин","супермарк","продукт","еда","food","market","magnum","small"],
     "Кафе / рестораны":    ["кафе","ресторан","cafe","restaurant","coffee","кофе","bar"],
@@ -359,6 +359,18 @@ def build_analytics(all_transactions):
         cat_monthly_table.append(row)
     cat_monthly_table.sort(key=lambda x: -x["total"])
 
+    # Поступления по категориям
+    cat_income_data = defaultdict(float)
+    for t in all_transactions:
+        if t["type"] == "income" and not t.get("internal"):
+            cat_income_data[t["category"]] += t["credit"]
+    cat_income_table = sorted(
+        [{"category": cat, "total": clean(amt),
+          "share": round(amt/total_inc*100, 1) if total_inc > 0 else 0}
+         for cat, amt in cat_income_data.items()],
+        key=lambda x: -x["total"]
+    )
+
     # По банкам
     bank_data = defaultdict(lambda: {"income": 0.0, "expense": 0.0, "count": 0})
     for t in all_transactions:
@@ -384,6 +396,7 @@ def build_analytics(all_transactions):
         "top_income":   [{"category": k, "amount": clean(v)} for k,v in top_inc],
         "monthly": monthly_sorted,
         "cat_monthly": cat_monthly_table,
+        "cat_income": cat_income_table,
         "recommendations": recommendations,
     }
 
@@ -416,7 +429,7 @@ def generate_recommendations(txns, inc, exp, net, cat_exp, monthly):
     tax = cat_exp.get("Налоги / взносы", 0)
     if tax > 0:
         recs.append({"type":"info","icon":"info","title":"Налоговая нагрузка",
-            "text":f"Уплачено: {tax:,.0f} ₸ ({(tax/exp*100) if exp > 0 else 0:.1f}% расходов). Проверьте применение вычетов."})
+            "text":f"Уплачено налогов: {tax:,.0f} ₸ ({(tax/exp*100) if exp > 0 else 0:.1f}% расходов). Проверьте применение вычетов."})
     if not recs:
         recs.append({"type":"success","icon":"check","title":"Финансовые показатели в норме",
             "text":"Структура доходов и расходов сбалансирована."})
