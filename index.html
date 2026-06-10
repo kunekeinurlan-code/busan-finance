@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -8,71 +7,68 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--navy:#1A1A2E;--navy2:#16213E;--gold:#D4A017;--gold-l:#F0C040;--cream:#F8F6F0;--white:#fff;--green:#27AE60;--red:#E74C3C;--amber:#F39C12;--text:#1A1A2E;--muted:#6B7280;--border:#E5E7EB;--surf:#F9F8F5}
+:root{--navy:#1A1A2E;--navy2:#16213E;--gold:#D4A017;--gold-l:#F0C040;--cream:#F8F6F0;--white:#fff;--green:#27AE60;--red:#E74C3C;--text:#1A1A2E;--muted:#6B7280;--border:#E5E7EB;--surf:#F9F8F5}
 body{font-family:'Segoe UI',-apple-system,sans-serif;background:var(--cream);color:var(--text);min-height:100vh}
 header{background:var(--navy);padding:0 32px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;border-bottom:1px solid rgba(212,160,23,.3)}
 .logo{display:flex;align-items:center;gap:10px}
 .logo-mark{width:32px;height:32px;background:var(--gold);border-radius:7px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:var(--navy)}
-.logo-name{font-size:14px;font-weight:700;color:#fff;letter-spacing:.3px}
+.logo-name{font-size:14px;font-weight:700;color:#fff}
 .logo-sub{font-size:9px;color:var(--gold);letter-spacing:2px}
-.header-right{display:flex;align-items:center;gap:12px}
+.hdr-right{display:flex;align-items:center;gap:12px}
 .badge{font-size:10px;color:var(--gold);border:1px solid rgba(212,160,23,.4);padding:3px 10px;border-radius:12px}
 .btn-logout{background:transparent;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer;display:none}
-.btn-logout:hover{border-color:rgba(255,255,255,.5);color:#fff}
-main{max-width:1100px;margin:0 auto;padding:32px 20px 80px}
+.btn-logout:hover{color:#fff;border-color:rgba(255,255,255,.5)}
+main{max-width:1120px;margin:0 auto;padding:28px 20px 80px}
 
 /* LOGIN */
 #loginSection{display:flex;align-items:center;justify-content:center;min-height:70vh}
-.login-card{background:var(--white);border:1px solid var(--border);border-radius:16px;padding:48px 40px;text-align:center;width:100%;max-width:400px}
-.login-icon{font-size:40px;margin-bottom:16px}
-.login-title{font-size:22px;font-weight:700;color:var(--navy);margin-bottom:8px}
-.login-sub{font-size:13px;color:var(--muted);margin-bottom:28px}
+.login-card{background:var(--white);border:1px solid var(--border);border-radius:16px;padding:48px 40px;text-align:center;width:100%;max-width:380px}
+.login-icon{font-size:36px;margin-bottom:14px}
+.login-title{font-size:20px;font-weight:700;color:var(--navy);margin-bottom:6px}
+.login-sub{font-size:13px;color:var(--muted);margin-bottom:24px}
 .login-input{width:100%;padding:12px 16px;border:1px solid var(--border);border-radius:8px;font-size:15px;outline:none;text-align:center;letter-spacing:4px;font-family:monospace}
 .login-input:focus{border-color:var(--gold)}
-.btn-login{width:100%;margin-top:14px;background:var(--navy);color:var(--gold);border:none;border-radius:8px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.5px}
+.btn-login{width:100%;margin-top:12px;background:var(--navy);color:var(--gold);border:none;border-radius:8px;padding:13px;font-size:14px;font-weight:700;cursor:pointer}
 .btn-login:hover{background:var(--navy2)}
 .login-err{color:var(--red);font-size:12px;margin-top:8px;display:none}
 
 /* DB BANNER */
-.db-banner{background:var(--navy);border-radius:10px;padding:14px 20px;margin-bottom:20px;display:none;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
-.db-banner-info{color:#fff;font-size:13px}
-.db-banner-info span{color:var(--gold);font-weight:700}
-.db-banner-actions{display:flex;gap:8px}
+.db-banner{background:var(--navy);border-radius:10px;padding:12px 20px;margin-bottom:18px;display:none;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.db-info{color:#fff;font-size:12px}
+.db-info span{color:var(--gold);font-weight:700}
+.db-actions{display:flex;gap:8px}
 .btn-sm{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none}
-.btn-view-db{background:var(--gold);color:var(--navy)}
-.btn-clear-db{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2)!important}
-.btn-clear-db:hover{background:rgba(231,76,60,.3)}
+.btn-view{background:var(--gold);color:var(--navy)}
+.btn-clear{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2)!important}
 
 /* UPLOAD */
-.upload-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:40px 32px;text-align:center;margin-bottom:20px}
-.upload-title{font-size:20px;font-weight:700;color:var(--navy);margin-bottom:6px}
-.upload-desc{font-size:13px;color:var(--muted);margin-bottom:20px}
-.bank-tags{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:20px}
+.upload-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:36px 28px;text-align:center;margin-bottom:18px}
+.upload-title{font-size:19px;font-weight:700;color:var(--navy);margin-bottom:6px}
+.upload-desc{font-size:13px;color:var(--muted);margin-bottom:18px}
+.bank-tags{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:18px}
 .tag{padding:4px 12px;border-radius:12px;font-size:11px;font-weight:600;border:1.5px solid}
 .tag.k{background:#FEF2F2;color:#DC2626;border-color:#FCA5A5}
 .tag.h{background:#F0FDF4;color:#16A34A;border-color:#86EFAC}
 .tag.f{background:#EFF6FF;color:#2563EB;border-color:#93C5FD}
+.tag.b{background:#FFF7ED;color:#C2410C;border-color:#FDBA74}
 .tag.o{background:var(--surf);color:var(--muted);border-color:var(--border)}
-.drop-zone{border:2px dashed var(--border);border-radius:10px;padding:28px;cursor:pointer;background:var(--surf);position:relative;transition:all .2s}
+.drop-zone{border:2px dashed var(--border);border-radius:10px;padding:24px;cursor:pointer;background:var(--surf);position:relative;transition:all .2s}
 .drop-zone:hover,.drop-zone.has-files{border-color:var(--gold);background:#FDFBF4}
 .drop-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
 .drop-text{font-size:13px;color:var(--muted)}
 .drop-text span{color:var(--gold);font-weight:600}
-.file-list{margin-top:10px;text-align:left}
-.file-item{display:flex;align-items:center;gap:8px;padding:7px 12px;background:var(--white);border:1px solid var(--border);border-radius:7px;margin-top:5px;font-size:12px}
+.file-list{margin-top:8px;text-align:left}
+.file-item{display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--white);border:1px solid var(--border);border-radius:7px;margin-top:4px;font-size:12px}
 .file-item .fn{flex:1;font-weight:500}
-.file-item .rm{color:var(--muted);cursor:pointer;font-size:14px}
+.file-item .rm{color:var(--muted);cursor:pointer}
 .file-item .rm:hover{color:var(--red)}
-
-/* MODE TOGGLE */
-.mode-row{display:flex;gap:10px;justify-content:center;margin-top:18px;flex-wrap:wrap}
+.mode-row{display:flex;gap:8px;justify-content:center;margin-top:16px}
 .mode-btn{padding:8px 18px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:var(--white);color:var(--muted);transition:all .15s}
 .mode-btn.active{border-color:var(--navy);background:var(--navy);color:var(--gold)}
-
-.btn-analyze{margin-top:18px;background:var(--navy);color:var(--gold);border:none;border-radius:9px;padding:13px 36px;font-size:14px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:7px;transition:all .2s}
+.btn-analyze{margin-top:16px;background:var(--navy);color:var(--gold);border:none;border-radius:9px;padding:12px 36px;font-size:14px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
 .btn-analyze:hover{background:var(--navy2)}
 .btn-analyze:disabled{opacity:.4;cursor:not-allowed}
-.err-box{background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:12px 16px;color:#DC2626;font-size:13px;margin-top:12px;display:none}
+.err-box{background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:10px 14px;color:#DC2626;font-size:13px;margin-top:10px;display:none}
 
 /* LOADING */
 #loading{display:none;text-align:center;padding:60px 0}
@@ -81,106 +77,121 @@ main{max-width:1100px;margin:0 auto;padding:32px 20px 80px}
 
 /* RESULTS */
 #results{display:none}
-.results-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px}
-.results-title{font-size:18px;font-weight:700;color:var(--navy)}
-.results-meta{font-size:12px;color:var(--muted);margin-top:2px}
-.btn-dl{background:var(--gold);color:var(--navy);border:none;border-radius:7px;padding:9px 18px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px}
+.res-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px}
+.res-title{font-size:17px;font-weight:700;color:var(--navy)}
+.res-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.hdr-btns{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn-dl{background:var(--gold);color:var(--navy);border:none;border-radius:7px;padding:9px 16px;font-size:12px;font-weight:700;cursor:pointer}
 .btn-dl:hover{background:var(--gold-l)}
 .btn-back{background:transparent;border:1px solid var(--border);border-radius:7px;padding:8px 14px;font-size:12px;color:var(--muted);cursor:pointer}
 .btn-back:hover{border-color:var(--navy);color:var(--navy)}
-.added-badge{background:#F0FDF4;border:1px solid #86EFAC;color:#15803D;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;display:none}
+.added-badge{background:#F0FDF4;border:1px solid #86EFAC;color:#15803D;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;display:none}
 
 /* KPI */
-.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:18px}
-.kpi{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:18px;position:relative;overflow:hidden}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px}
+.kpi{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:16px;position:relative;overflow:hidden}
 .kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--navy)}
 .kpi.inc::before{background:var(--green)}.kpi.exp::before{background:var(--red)}.kpi.net::before{background:var(--gold)}
-.kpi-lbl{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
-.kpi-val{font-size:18px;font-weight:800;color:var(--navy)}
+.kpi-lbl{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px}
+.kpi-val{font-size:17px;font-weight:800;color:var(--navy)}
 .kpi-val.g{color:var(--green)}.kpi-val.r{color:var(--red)}
-.kpi-sub{font-size:11px;color:#9CA3AF;margin-top:3px}
+.kpi-sub{font-size:10px;color:#9CA3AF;margin-top:3px}
 
-/* SECTIONS */
-.sec{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px}
-.sec-title{font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px}
-.dot{width:6px;height:6px;border-radius:50%;background:var(--gold);flex-shrink:0}
-.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+/* INTERNAL BANNER */
+.int-banner{background:#FFFBEB;border:1px solid #FCD34D;border-radius:10px;padding:12px 18px;margin-bottom:14px;display:none;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.int-label{font-size:12px;font-weight:700;color:#92400E}
+.int-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.int-stats{display:flex;gap:20px}
+.int-stat{text-align:center}
+.int-stat-lbl{font-size:10px;color:var(--muted)}
+.int-stat-val{font-size:14px;font-weight:700}
+
+/* SECTION */
+.sec{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:14px}
+.sec-title{font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px}
+.dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.dot.g{background:var(--green)}.dot.r{background:var(--red)}.dot.gold{background:var(--gold)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 @media(max-width:680px){.two{grid-template-columns:1fr}}
-.chart-wrap{position:relative;height:210px}
+.chart-wrap{position:relative;height:200px}
 
-/* BAR LIST */
-.bar-list{display:flex;flex-direction:column;gap:8px}
-.bar-row2{display:flex;justify-content:space-between;margin-bottom:3px;font-size:11px}
-.bar-lbl{color:var(--text);font-weight:500}.bar-amt{color:var(--muted);font-weight:600}
-.bar-track{height:5px;background:var(--border);border-radius:3px;overflow:hidden}
-.bar-fill{height:100%;border-radius:3px;background:var(--red)}
+/* CHART LABELS */
+.chart-legend{display:flex;gap:16px;margin-bottom:10px;flex-wrap:wrap}
+.chart-legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)}
+.chart-legend-dot{width:8px;height:8px;border-radius:2px}
 
-/* CAT/MONTH TABLE */
-.tbl-wrap{overflow-x:auto}
-.cat-table{width:100%;border-collapse:collapse;font-size:11px;min-width:600px}
-.cat-table th{background:var(--navy);color:var(--gold);padding:7px 10px;text-align:right;font-size:10px;font-weight:600;white-space:nowrap}
-.cat-table th:first-child{text-align:left}
-.cat-table td{padding:7px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
-.cat-table td:first-child{text-align:left;font-weight:600;color:var(--navy)}
-.cat-table tr:nth-child(even) td{background:var(--surf)}
-.cat-table .total-col{font-weight:700;color:var(--red)}
-.cat-table .share-col{color:var(--muted)}
-.cat-table .heat-high{background:#FEE2E2!important;color:#DC2626;font-weight:700}
-.cat-table .heat-mid{background:#FEF3C7!important;color:#92400E}
+/* CATEGORY BLOCKS */
+.cat-block{margin-bottom:0}
+.cat-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)}
+.cat-row:last-child{border-bottom:none}
+.cat-name{flex:1;font-size:12px;color:var(--text);font-weight:500}
+.cat-bar-wrap{width:120px}
+.cat-bar-track{height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.cat-bar-fill{height:100%;border-radius:3px}
+.cat-bar-fill.exp{background:var(--red)}.cat-bar-fill.inc{background:var(--green)}
+.cat-amt{font-size:12px;font-weight:600;color:var(--text);text-align:right;min-width:90px}
+.cat-share{font-size:11px;color:var(--muted);text-align:right;min-width:40px}
+
+/* BANK BREAKDOWN */
+.bank-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px}
+.bank-row:last-child{border-bottom:none}
+.bank-name-cell{font-weight:700;color:var(--navy);min-width:70px}
+.bank-nums{display:flex;gap:16px}
+.bank-num{text-align:right}
+.bank-num-lbl{font-size:10px;color:var(--muted)}
+.bank-num-val{font-size:12px;font-weight:600}
 
 /* MONTHLY TABLE */
 .m-table{width:100%;border-collapse:collapse;font-size:11px}
-.m-table th{background:var(--navy);color:var(--gold);padding:7px 10px;text-align:left;font-size:10px}
+.m-table th{background:var(--navy);color:var(--gold);padding:7px 10px;text-align:left;font-size:10px;font-weight:600}
 .m-table td{padding:7px 10px;border-bottom:1px solid var(--border)}
 .m-table tr:nth-child(even) td{background:var(--surf)}
 .g{color:var(--green);font-weight:600}.r{color:var(--red);font-weight:600}
 
-/* BANKS */
-.bank-cards{display:flex;flex-wrap:wrap;gap:10px}
-.bank-card{flex:1;min-width:140px;background:var(--surf);border:1px solid var(--border);border-radius:9px;padding:14px}
-.bank-name{font-size:12px;font-weight:700;color:var(--navy);margin-bottom:8px}
-.bank-row{display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px}
-.bank-row span:first-child{color:var(--muted)}
+/* CAT/MONTH TABLE */
+.tbl-wrap{overflow-x:auto}
+.cat-table{width:100%;border-collapse:collapse;font-size:11px;min-width:500px}
+.cat-table th{background:var(--navy);color:var(--gold);padding:6px 10px;text-align:right;font-size:10px;font-weight:600;white-space:nowrap}
+.cat-table th:first-child{text-align:left}
+.cat-table td{padding:6px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+.cat-table td:first-child{text-align:left;font-weight:600;color:var(--navy)}
+.cat-table tr:nth-child(even) td{background:var(--surf)}
+.heat-high{background:#FEE2E2!important;color:#DC2626;font-weight:700}
+.heat-mid{background:#FEF3C7!important;color:#92400E}
 
 /* RECS */
 .rec-list{display:flex;flex-direction:column;gap:8px}
-.rec{display:flex;gap:10px;padding:12px 14px;border-radius:8px;border:1px solid}
+.rec{display:flex;gap:10px;padding:10px 14px;border-radius:8px;border:1px solid}
 .rec.success{background:#F0FDF4;border-color:#86EFAC}
 .rec.warning{background:#FFFBEB;border-color:#FCD34D}
 .rec.danger{background:#FEF2F2;border-color:#FCA5A5}
 .rec.info{background:#EFF6FF;border-color:#93C5FD}
-.rec-icon{font-size:14px;flex-shrink:0}
 .rec-t{font-size:12px;font-weight:700;margin-bottom:2px}
 .rec-d{font-size:11px;color:var(--muted);line-height:1.4}
 .rec.success .rec-t{color:#15803D}.rec.warning .rec-t{color:#92400E}.rec.danger .rec-t{color:#DC2626}.rec.info .rec-t{color:#1D4ED8}
-footer{text-align:center;padding:20px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)}
+footer{text-align:center;padding:18px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)}
 </style>
 </head>
 <body>
 <header>
   <div class="logo">
     <div class="logo-mark">BF</div>
-    <div>
-      <div class="logo-name">BUSAN FINANCE</div>
-      <div class="logo-sub">CASHFLOW ANALYTICS</div>
-    </div>
+    <div><div class="logo-name">BUSAN FINANCE</div><div class="logo-sub">CASHFLOW ANALYTICS</div></div>
   </div>
-  <div class="header-right">
+  <div class="hdr-right">
     <span class="badge">KUNEKEI GROUP</span>
     <button class="btn-logout" id="btnLogout" onclick="logout()">Выйти</button>
   </div>
 </header>
 
 <main>
-
 <!-- LOGIN -->
 <div id="loginSection">
   <div class="login-card">
     <div class="login-icon">🔐</div>
     <div class="login-title">BUSAN FINANCE</div>
-    <div class="login-sub">Введите пароль для доступа к системе</div>
-    <input class="login-input" type="password" id="pwdInput" placeholder="••••••••"
-           onkeydown="if(event.key==='Enter') doLogin()">
+    <div class="login-sub">Введите пароль для доступа</div>
+    <input class="login-input" type="password" id="pwdInput" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
     <button class="btn-login" onclick="doLogin()">Войти</button>
     <div class="login-err" id="loginErr">Неверный пароль</div>
   </div>
@@ -191,318 +202,353 @@ footer{text-align:center;padding:20px;font-size:11px;color:var(--muted);border-t
 
   <!-- DB BANNER -->
   <div class="db-banner" id="dbBanner">
-    <div class="db-banner-info">
-      💾 База данных: <span id="dbTotal">0</span> транзакций ·
-      обновлено <span id="dbUpdated">—</span> ·
-      периоды: <span id="dbMonths">—</span>
-    </div>
-    <div class="db-banner-actions">
-      <button class="btn-sm btn-view-db" onclick="viewDb()">📊 Показать отчёт</button>
-      <button class="btn-sm btn-clear-db" onclick="clearDb()">🗑 Очистить</button>
+    <div class="db-info">💾 База: <span id="dbTotal">0</span> транзакций · обновлено <span id="dbUpdated">—</span> · периоды: <span id="dbMonths">—</span></div>
+    <div class="db-actions">
+      <button class="btn-sm btn-view" onclick="viewDb()">📊 Показать отчёт</button>
+      <button class="btn-sm btn-clear" onclick="clearDb()">🗑 Очистить</button>
     </div>
   </div>
 
   <!-- UPLOAD -->
   <div class="upload-card" id="uploadSection">
     <div class="upload-title">Загрузка выписок</div>
-    <div class="upload-desc">Загрузите выписки — система консолидирует данные и сформирует cashflow отчёт</div>
+    <div class="upload-desc">Загрузите выписки — система консолидирует и сформирует cashflow отчёт</div>
     <div class="bank-tags">
-      <span class="tag k">Kaspi</span>
-      <span class="tag h">Halyk</span>
-      <span class="tag f">Freedom</span>
+      <span class="tag k">Kaspi</span><span class="tag h">Halyk</span>
+      <span class="tag f">Freedom</span><span class="tag b">БЦК</span>
       <span class="tag o">+ другие</span>
     </div>
     <div class="drop-zone" id="dropZone">
       <input type="file" id="fileInput" multiple accept=".xlsx,.xls">
       <p class="drop-text">Перетащите файлы или <span>выберите</span></p>
-      <p class="drop-text" style="font-size:11px;opacity:.6;margin-top:4px">Форматы: .xlsx, .xls</p>
+      <p class="drop-text" style="font-size:11px;opacity:.6;margin-top:3px">Форматы: .xlsx, .xls</p>
       <div class="file-list" id="fileList"></div>
     </div>
-
     <div class="mode-row">
-      <button class="mode-btn active" id="modeAppend" onclick="setMode('append')">
-        ➕ Добавить к базе
-      </button>
-      <button class="mode-btn" id="modeReplace" onclick="setMode('replace')">
-        🔄 Заменить базу
-      </button>
+      <button class="mode-btn active" id="modeAppend" onclick="setMode('append')">➕ Добавить к базе</button>
+      <button class="mode-btn" id="modeReplace" onclick="setMode('replace')">🔄 Заменить базу</button>
     </div>
-
     <div class="err-box" id="errBox"></div>
     <button class="btn-analyze" id="analyzeBtn" onclick="analyze()" disabled>⚡ Анализировать</button>
   </div>
 
-  <!-- LOADING -->
   <div id="loading"><div class="spinner"></div><p style="color:var(--muted);font-size:13px">Обрабатываем выписки...</p></div>
 
   <!-- RESULTS -->
   <div id="results">
-    <div class="results-hdr">
-      <div>
-        <div class="results-title">Cashflow отчёт</div>
-        <div class="results-meta" id="resultsMeta"></div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <div class="res-hdr">
+      <div><div class="res-title">Cashflow отчёт</div><div class="res-meta" id="resMeta"></div></div>
+      <div class="hdr-btns">
         <div class="added-badge" id="addedBadge"></div>
         <button class="btn-back" onclick="resetForm()">← Загрузить ещё</button>
         <button class="btn-dl" onclick="downloadExcel()">⬇ Excel</button>
       </div>
     </div>
 
+    <!-- KPI -->
     <div class="kpi-grid">
-      <div class="kpi inc"><div class="kpi-lbl">Доходы</div><div class="kpi-val g" id="kpiInc">—</div><div class="kpi-sub" id="kpiIncSub"></div></div>
-      <div class="kpi exp"><div class="kpi-lbl">Расходы</div><div class="kpi-val r" id="kpiExp">—</div></div>
+      <div class="kpi inc"><div class="kpi-lbl">Поступления</div><div class="kpi-val g" id="kpiInc">—</div><div class="kpi-sub" id="kpiIncSub"></div></div>
+      <div class="kpi exp"><div class="kpi-lbl">Расходы</div><div class="kpi-val r" id="kpiExp">—</div><div class="kpi-sub" id="kpiExpSub"></div></div>
       <div class="kpi net"><div class="kpi-lbl">Чистый CF</div><div class="kpi-val" id="kpiNet">—</div><div class="kpi-sub" id="kpiNetSub"></div></div>
       <div class="kpi"><div class="kpi-lbl">Транзакций в базе</div><div class="kpi-val" id="kpiTxn">—</div><div class="kpi-sub" id="kpiBanks"></div></div>
     </div>
 
-    <div class="two">
-      <div class="sec"><div class="sec-title"><span class="dot"></span>Доходы / расходы по месяцам</div><div class="chart-wrap"><canvas id="monthlyChart"></canvas></div></div>
-      <div class="sec"><div class="sec-title"><span class="dot"></span>Структура расходов</div><div class="chart-wrap"><canvas id="pieChart"></canvas></div></div>
+    <!-- Внутренние переводы -->
+    <div class="int-banner" id="intBanner">
+      <div>
+        <div class="int-label">↔ Внутренние переводы — исключены из P&L</div>
+        <div class="int-sub">Переводы между своими счетами не учитываются в расчёте</div>
+      </div>
+      <div class="int-stats">
+        <div class="int-stat"><div class="int-stat-lbl">Исходящих</div><div class="int-stat-val r" id="intOut">—</div></div>
+        <div class="int-stat"><div class="int-stat-lbl">Входящих</div><div class="int-stat-val g" id="intIn">—</div></div>
+        <div class="int-stat"><div class="int-stat-lbl">Операций</div><div class="int-stat-val" id="intCount">—</div></div>
+      </div>
     </div>
 
-    <!-- Таблица расходов по категориям и месяцам -->
+    <!-- Гистограмма -->
     <div class="sec">
-      <div class="sec-title"><span class="dot"></span>Расходы по категориям и месяцам</div>
+      <div class="sec-title"><span class="dot gold"></span>Поступления и расходы по месяцам</div>
+      <div class="chart-wrap"><canvas id="monthlyChart"></canvas></div>
+    </div>
+
+    <!-- РАСХОДЫ -->
+    <div class="sec">
+      <div class="sec-title"><span class="dot r"></span>Расходы — структура и динамика</div>
+      <div class="two">
+        <!-- По категориям -->
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">По категориям</div>
+          <div class="cat-block" id="expCats"></div>
+        </div>
+        <!-- По банкам -->
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">По банкам</div>
+          <div id="expBanks"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ПОСТУПЛЕНИЯ -->
+    <div class="sec">
+      <div class="sec-title"><span class="dot g"></span>Поступления — структура и динамика</div>
+      <div class="two">
+        <!-- По категориям -->
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">По категориям</div>
+          <div class="cat-block" id="incCats"></div>
+        </div>
+        <!-- По банкам -->
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">По банкам</div>
+          <div id="incBanks"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Расходы по категориям и месяцам -->
+    <div class="sec">
+      <div class="sec-title"><span class="dot r"></span>Расходы по категориям и месяцам</div>
       <div class="tbl-wrap"><table class="cat-table" id="catMonthTable"></table></div>
     </div>
 
-    <div class="two">
-      <div class="sec"><div class="sec-title"><span class="dot"></span>По банкам</div><div class="bank-cards" id="bankCards"></div></div>
-      <div class="sec"><div class="sec-title"><span class="dot"></span>Топ расходов</div><div class="bar-list" id="expBars"></div></div>
-    </div>
-
+    <!-- Динамика по месяцам -->
     <div class="sec">
-      <div class="sec-title"><span class="dot"></span>Динамика по месяцам</div>
+      <div class="sec-title"><span class="dot gold"></span>Динамика по месяцам</div>
       <div style="overflow-x:auto">
         <table class="m-table">
-          <thead><tr><th>Месяц</th><th>Доходы (₸)</th><th>Расходы (₸)</th><th>Чистый CF (₸)</th><th>Норма %</th></tr></thead>
+          <thead><tr><th>Месяц</th><th>Поступления (₸)</th><th>Расходы (₸)</th><th>Чистый CF (₸)</th><th>Расходы / Поступления</th></tr></thead>
           <tbody id="monthlyBody"></tbody>
         </table>
       </div>
     </div>
 
-    <div class="sec"><div class="sec-title"><span class="dot"></span>Рекомендации</div><div class="rec-list" id="recList"></div></div>
+    <!-- Рекомендации -->
+    <div class="sec"><div class="sec-title"><span class="dot gold"></span>Рекомендации</div><div class="rec-list" id="recList"></div></div>
   </div>
 
-</div><!-- /appSection -->
+</div>
 </main>
 <footer>BUSAN FINANCE · KUNEKEI GROUP · Данные защищены · Файлы не хранятся на сервере</footer>
 
 <script>
-let files=[], mode='append', mChart=null, pChart=null;
+let files=[], mode='append', mChart=null;
 
-// ─── AUTH ────────────────────────────────────────────────────────────────────
 async function doLogin(){
-  const pwd = document.getElementById('pwdInput').value;
-  const r = await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pwd})});
-  const d = await r.json();
+  const r=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:document.getElementById('pwdInput').value})});
+  const d=await r.json();
   if(d.ok){
     document.getElementById('loginSection').style.display='none';
     document.getElementById('appSection').style.display='block';
     document.getElementById('btnLogout').style.display='block';
     loadDbStats();
-  } else {
-    document.getElementById('loginErr').style.display='block';
-  }
+  } else { document.getElementById('loginErr').style.display='block'; }
 }
-async function logout(){
-  await fetch('/logout',{method:'POST'});
-  location.reload();
-}
+async function logout(){ await fetch('/logout',{method:'POST'}); location.reload(); }
 
-// ─── DB ──────────────────────────────────────────────────────────────────────
 async function loadDbStats(){
   try{
-    const r = await fetch('/db-stats');
-    if(!r.ok) return;
-    const d = await r.json();
-    if(d.total > 0){
+    const r=await fetch('/db-stats'); if(!r.ok)return;
+    const d=await r.json();
+    if(d.total>0){
       document.getElementById('dbBanner').style.display='flex';
-      document.getElementById('dbTotal').textContent = d.total;
-      document.getElementById('dbUpdated').textContent = d.updated_at || '—';
-      document.getElementById('dbMonths').textContent = d.months.length > 0 ? d.months[0]+' — '+d.months[d.months.length-1] : '—';
+      document.getElementById('dbTotal').textContent=d.total;
+      document.getElementById('dbUpdated').textContent=d.updated_at||'—';
+      document.getElementById('dbMonths').textContent=d.months.length?d.months[0]+' — '+d.months[d.months.length-1]:'—';
     }
   }catch(e){}
 }
 async function viewDb(){
-  document.getElementById('uploadSection').style.display='none';
-  document.getElementById('loading').style.display='block';
-  document.getElementById('results').style.display='none';
-  const r = await fetch('/db-analyze');
-  const d = await r.json();
-  document.getElementById('loading').style.display='none';
-  if(d.error){ alert(d.error); document.getElementById('uploadSection').style.display='block'; return; }
-  renderResults(d);
-  document.getElementById('results').style.display='block';
+  show('loading');
+  const r=await fetch('/db-analyze'); const d=await r.json();
+  hide('loading');
+  if(d.error){alert(d.error);show('uploadSection');return;}
+  renderResults(d); show('results');
 }
 async function clearDb(){
-  if(!confirm('Очистить всю накопленную базу данных?')) return;
+  if(!confirm('Очистить всю базу данных?'))return;
   await fetch('/db-clear',{method:'POST'});
   document.getElementById('dbBanner').style.display='none';
-  alert('База очищена');
 }
 
-// ─── FILES ───────────────────────────────────────────────────────────────────
-document.getElementById('fileInput').addEventListener('change', e=>addFiles([...e.target.files]));
-const dz = document.getElementById('dropZone');
-dz.addEventListener('dragover', e=>{e.preventDefault();dz.classList.add('has-files')});
-dz.addEventListener('dragleave', ()=>dz.classList.remove('has-files'));
-dz.addEventListener('drop', e=>{e.preventDefault();addFiles([...e.dataTransfer.files].filter(f=>f.name.match(/\.xlsx?$/i)))});
-
-function addFiles(f){ f.forEach(x=>{ if(!files.find(y=>y.name===x.name)) files.push(x); }); renderFiles(); }
-function removeFile(i){ files.splice(i,1); renderFiles(); }
+document.getElementById('fileInput').addEventListener('change',e=>addFiles([...e.target.files]));
+const dz=document.getElementById('dropZone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('has-files')});
+dz.addEventListener('dragleave',()=>dz.classList.remove('has-files'));
+dz.addEventListener('drop',e=>{e.preventDefault();addFiles([...e.dataTransfer.files].filter(f=>f.name.match(/\.xlsx?$/i)))});
+function addFiles(f){f.forEach(x=>{if(!files.find(y=>y.name===x.name))files.push(x)});renderFiles();}
+function removeFile(i){files.splice(i,1);renderFiles();}
 function renderFiles(){
-  document.getElementById('fileList').innerHTML = files.map((f,i)=>
-    `<div class="file-item">📄 <span class="fn">${f.name}</span><span class="rm" onclick="removeFile(${i})">✕</span></div>`
-  ).join('');
-  document.getElementById('analyzeBtn').disabled = files.length===0;
-  dz.classList.toggle('has-files', files.length>0);
+  document.getElementById('fileList').innerHTML=files.map((f,i)=>`<div class="file-item">📄 <span class="fn">${f.name}</span><span class="rm" onclick="removeFile(${i})">✕</span></div>`).join('');
+  document.getElementById('analyzeBtn').disabled=files.length===0;
+  dz.classList.toggle('has-files',files.length>0);
 }
 function setMode(m){
   mode=m;
-  document.getElementById('modeAppend').classList.toggle('active', m==='append');
-  document.getElementById('modeReplace').classList.toggle('active', m==='replace');
+  document.getElementById('modeAppend').classList.toggle('active',m==='append');
+  document.getElementById('modeReplace').classList.toggle('active',m==='replace');
 }
+function show(id){document.getElementById(id).style.display='block';}
+function hide(id){document.getElementById(id).style.display='none';}
 
-// ─── ANALYZE ─────────────────────────────────────────────────────────────────
 async function analyze(){
   document.getElementById('errBox').style.display='none';
-  document.getElementById('uploadSection').style.display='none';
-  document.getElementById('loading').style.display='block';
-  document.getElementById('results').style.display='none';
-  const fd = new FormData();
-  files.forEach(f=>fd.append('files',f));
-  fd.append('mode', mode);
+  hide('uploadSection'); show('loading'); hide('results');
+  const fd=new FormData(); files.forEach(f=>fd.append('files',f)); fd.append('mode',mode);
   try{
-    const r = await fetch('/analyze',{method:'POST',body:fd});
-    const d = await r.json();
-    document.getElementById('loading').style.display='none';
-    if(!r.ok){
-      document.getElementById('uploadSection').style.display='block';
-      document.getElementById('errBox').textContent=d.error;
-      document.getElementById('errBox').style.display='block';
-      return;
-    }
-    renderResults(d);
-    document.getElementById('results').style.display='block';
-    loadDbStats();
+    const r=await fetch('/analyze',{method:'POST',body:fd});
+    const d=await r.json();
+    hide('loading');
+    if(!r.ok){show('uploadSection');document.getElementById('errBox').textContent=d.error;document.getElementById('errBox').style.display='block';return;}
+    renderResults(d); show('results'); loadDbStats();
   }catch(e){
-    document.getElementById('loading').style.display='none';
-    document.getElementById('uploadSection').style.display='block';
-    document.getElementById('errBox').textContent='Ошибка соединения';
-    document.getElementById('errBox').style.display='block';
+    hide('loading'); show('uploadSection');
+    document.getElementById('errBox').textContent='Ошибка соединения'; document.getElementById('errBox').style.display='block';
   }
 }
 
-// ─── RENDER ──────────────────────────────────────────────────────────────────
-function fmt(n){ return new Intl.NumberFormat('ru-RU').format(Math.round(n||0)); }
+function fmt(n){return new Intl.NumberFormat('ru-RU').format(Math.round(n||0));}
+function pct(a,b){return b>0?Math.round(a/b*100):0;}
 
 function renderResults(d){
-  const meta = [];
+  // Meta
+  const meta=[];
   if(d.db_total) meta.push(`${d.db_total} транзакций в базе`);
   if(d.db_updated) meta.push(`обновлено ${d.db_updated}`);
-  document.getElementById('resultsMeta').textContent = meta.join(' · ');
+  document.getElementById('resMeta').textContent=meta.join(' · ');
+  if(d.added>0){const ab=document.getElementById('addedBadge');ab.textContent=`+${d.added} новых`;ab.style.display='block';}
 
-  if(d.added > 0){
-    const ab = document.getElementById('addedBadge');
-    ab.textContent = `+${d.added} новых транзакций`;
-    ab.style.display='block';
+  // KPI
+  document.getElementById('kpiInc').textContent=fmt(d.total_income)+' ₸';
+  document.getElementById('kpiIncSub').textContent=`${(d.banks||[]).length} банк(а)`;
+  document.getElementById('kpiExp').textContent=fmt(d.total_expense)+' ₸';
+  const expShare=pct(d.total_expense,d.total_income);
+  document.getElementById('kpiExpSub').textContent=`${expShare}% от поступлений`;
+  const net=d.net_cashflow||0;
+  const kn=document.getElementById('kpiNet');
+  kn.textContent=(net>=0?'+':'')+fmt(net)+' ₸';
+  kn.className='kpi-val '+(net>=0?'g':'r');
+  document.getElementById('kpiNetSub').textContent=`Норма сбережений: ${pct(net,d.total_income)}%`;
+  document.getElementById('kpiTxn').textContent=d.db_total||d.total;
+  document.getElementById('kpiBanks').textContent=(d.banks||[]).map(b=>b.bank).join(', ');
+
+  // Внутренние
+  if(d.internal_count>0){
+    document.getElementById('intBanner').style.display='flex';
+    document.getElementById('intOut').textContent=fmt(d.internal_out)+' ₸';
+    document.getElementById('intIn').textContent=fmt(d.internal_in)+' ₸';
+    document.getElementById('intCount').textContent=d.internal_count;
   }
 
-  document.getElementById('kpiInc').textContent = fmt(d.total_income)+' ₸';
-  document.getElementById('kpiIncSub').textContent = `${d.banks?.length||0} банк(а)`;
-  document.getElementById('kpiExp').textContent = fmt(d.total_expense)+' ₸';
-  const net = d.net_cashflow||0;
-  const kn = document.getElementById('kpiNet');
-  kn.textContent = (net>=0?'+':'')+fmt(net)+' ₸';
-  kn.className = 'kpi-val '+(net>=0?'g':'r');
-  const sr = d.total_income>0?Math.round(net/d.total_income*100):0;
-  document.getElementById('kpiNetSub').textContent = `Норма сбережений: ${sr}%`;
-  document.getElementById('kpiTxn').textContent = d.db_total||d.total;
-  document.getElementById('kpiBanks').textContent = (d.banks||[]).map(b=>b.bank).join(', ');
-
-  // Monthly chart
+  // Гистограмма с удельным весом расходов
   if(mChart) mChart.destroy();
-  mChart = new Chart(document.getElementById('monthlyChart').getContext('2d'),{
-    type:'bar',
-    data:{labels:d.monthly.map(m=>m.month),datasets:[
-      {label:'Доходы',data:d.monthly.map(m=>Math.round(m.income)),backgroundColor:'rgba(39,174,96,.75)',borderRadius:3},
-      {label:'Расходы',data:d.monthly.map(m=>Math.round(m.expense)),backgroundColor:'rgba(231,76,60,.75)',borderRadius:3},
-    ]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{labels:{font:{size:10},boxWidth:10}}},
-      scales:{x:{grid:{display:false},ticks:{font:{size:9}}},
-              y:{grid:{color:'#F3F4F6'},ticks:{font:{size:9},callback:v=>v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?(v/1000)+'K':v}}}}
+  const mCtx=document.getElementById('monthlyChart').getContext('2d');
+  const months=d.monthly.map(m=>m.month);
+  const incData=d.monthly.map(m=>Math.round(m.income));
+  const expData=d.monthly.map(m=>Math.round(m.expense));
+  const shareData=d.monthly.map(m=>m.income>0?Math.round(m.expense/m.income*100):0);
+
+  mChart=new Chart(mCtx,{
+    data:{
+      labels:months,
+      datasets:[
+        {type:'bar',label:'Поступления',data:incData,backgroundColor:'rgba(39,174,96,.7)',borderRadius:3,yAxisID:'y'},
+        {type:'bar',label:'Расходы',data:expData,backgroundColor:'rgba(231,76,60,.7)',borderRadius:3,yAxisID:'y'},
+        {type:'line',label:'Расходы / Поступления %',data:shareData,borderColor:'#D4A017',borderWidth:2,
+         pointBackgroundColor:'#D4A017',pointRadius:3,tension:.3,yAxisID:'y2'},
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{font:{size:10},boxWidth:10,padding:10}}},
+      scales:{
+        x:{grid:{display:false},ticks:{font:{size:9}}},
+        y:{grid:{color:'#F3F4F6'},ticks:{font:{size:9},callback:v=>v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?(v/1000)+'K':v},position:'left'},
+        y2:{ticks:{font:{size:9},callback:v=>v+'%'},position:'right',grid:{display:false},min:0,max:150}
+      }
+    }
   });
 
-  // Pie chart
-  if(pChart) pChart.destroy();
-  const colors=['#E74C3C','#E67E22','#F39C12','#27AE60','#2980B9','#8E44AD','#1ABC9C','#D35400'];
-  pChart = new Chart(document.getElementById('pieChart').getContext('2d'),{
-    type:'doughnut',
-    data:{labels:d.top_expenses.map(e=>e.category),datasets:[{data:d.top_expenses.map(e=>Math.round(e.amount)),backgroundColor:colors,borderWidth:0,hoverOffset:4}]},
-    options:{responsive:true,maintainAspectRatio:false,cutout:'60%',
-      plugins:{legend:{position:'right',labels:{font:{size:9},boxWidth:9,padding:6}}}}
-  });
+  // РАСХОДЫ по категориям
+  const catExp=d.cat_monthly||[];
+  const expOnly=catExp.filter(r=>r.total>0);
+  const maxExp=expOnly[0]?.total||1;
+  document.getElementById('expCats').innerHTML=expOnly.map(r=>`
+    <div class="cat-row">
+      <span class="cat-name">${r.category}</span>
+      <div class="cat-bar-wrap"><div class="cat-bar-track"><div class="cat-bar-fill exp" style="width:${Math.round(r.total/maxExp*100)}%"></div></div></div>
+      <span class="cat-amt r">${fmt(r.total)} ₸</span>
+      <span class="cat-share">${r.share}%</span>
+    </div>`).join('');
 
-  // Cat/month table
-  const months = d.months||[];
-  const tbl = document.getElementById('catMonthTable');
-  let html = '<thead><tr><th>Категория</th>';
-  months.forEach(m=>html+=`<th>${m}</th>`);
-  html += '<th>ИТОГО</th><th>Уд. вес %</th></tr></thead><tbody>';
-  const maxAmt = d.cat_monthly&&d.cat_monthly[0]?d.cat_monthly[0].total:1;
-  (d.cat_monthly||[]).forEach(row=>{
-    const share = row.share||0;
-    const cls = share>20?'heat-high':share>10?'heat-mid':'';
+  // РАСХОДЫ по банкам
+  document.getElementById('expBanks').innerHTML=(d.banks||[]).map(b=>`
+    <div class="bank-row">
+      <span class="bank-name-cell">🏦 ${b.bank}</span>
+      <div class="bank-nums">
+        <div class="bank-num"><div class="bank-num-lbl">Расходы</div><div class="bank-num-val r">${fmt(b.expense)} ₸</div></div>
+        <div class="bank-num"><div class="bank-num-lbl">Доля</div><div class="bank-num-val">${pct(b.expense,d.total_expense)}%</div></div>
+      </div>
+    </div>`).join('');
+
+  // ПОСТУПЛЕНИЯ по категориям
+  const catInc=(d.cat_income||[]).filter(r=>r.total>0);
+  const maxInc=catInc[0]?.total||1;
+  document.getElementById('incCats').innerHTML=catInc.length ? catInc.map(r=>`
+    <div class="cat-row">
+      <span class="cat-name">${r.category}</span>
+      <div class="cat-bar-wrap"><div class="cat-bar-track"><div class="cat-bar-fill inc" style="width:${Math.round(r.total/maxInc*100)}%"></div></div></div>
+      <span class="cat-amt g">${fmt(r.total)} ₸</span>
+      <span class="cat-share">${r.share}%</span>
+    </div>`).join('') : '<div style="font-size:12px;color:var(--muted);padding:12px 0">Нет данных</div>';
+
+  // ПОСТУПЛЕНИЯ по банкам
+  document.getElementById('incBanks').innerHTML=(d.banks||[]).map(b=>`
+    <div class="bank-row">
+      <span class="bank-name-cell">🏦 ${b.bank}</span>
+      <div class="bank-nums">
+        <div class="bank-num"><div class="bank-num-lbl">Поступления</div><div class="bank-num-val g">${fmt(b.income)} ₸</div></div>
+        <div class="bank-num"><div class="bank-num-lbl">Доля</div><div class="bank-num-val">${pct(b.income,d.total_income)}%</div></div>
+      </div>
+    </div>`).join('');
+
+  // Таблица расходов по месяцам
+  const tbl=document.getElementById('catMonthTable');
+  const mths=d.months||[];
+  let html='<thead><tr><th>Категория расходов</th>';
+  mths.forEach(m=>html+=`<th>${m}</th>`);
+  html+='<th>ИТОГО</th><th>Уд. вес</th></tr></thead><tbody>';
+  expOnly.forEach((row,ri)=>{
+    const cls=row.share>20?'heat-high':row.share>10?'heat-mid':'';
     html+=`<tr><td>${row.category}</td>`;
-    months.forEach(m=>{ const v=row[m]||0; html+=`<td>${v>0?fmt(v):''}</td>`; });
-    html+=`<td class="total-col ${cls}">${fmt(row.total)}</td><td class="share-col">${share}%</td></tr>`;
+    mths.forEach(m=>{const v=row[m]||0;html+=`<td>${v>0?fmt(v):''}</td>`;});
+    html+=`<td class="${cls}">${fmt(row.total)}</td><td class="heat-mid" style="${row.share>20?'background:#FEE2E2;color:#DC2626':''}">${row.share}%</td></tr>`;
   });
   html+='</tbody>'; tbl.innerHTML=html;
 
-  // Banks
-  document.getElementById('bankCards').innerHTML=(d.banks||[]).map(b=>{
-    const n=b.income-b.expense;
-    return `<div class="bank-card"><div class="bank-name">🏦 ${b.bank}</div>
-      <div class="bank-row"><span>Доходы</span><span class="g">${fmt(b.income)} ₸</span></div>
-      <div class="bank-row"><span>Расходы</span><span class="r">${fmt(b.expense)} ₸</span></div>
-      <div class="bank-row"><span>CF</span><span class="${n>=0?'g':'r'}">${n>=0?'+':''}${fmt(n)} ₸</span></div>
-      <div class="bank-row"><span>Операций</span><span>${b.count}</span></div></div>`;
-  }).join('');
-
-  // Bars
-  const mx=(d.top_expenses[0]?.amount||1);
-  document.getElementById('expBars').innerHTML=(d.top_expenses||[]).map(e=>{
-    const p=Math.round(e.amount/mx*100);
-    return `<div><div class="bar-row2"><span class="bar-lbl">${e.category}</span><span class="bar-amt">${fmt(e.amount)} ₸</span></div>
-    <div class="bar-track"><div class="bar-fill" style="width:${p}%"></div></div></div>`;
-  }).join('');
-
-  // Monthly table
+  // Динамика по месяцам
   document.getElementById('monthlyBody').innerHTML=(d.monthly||[]).map(m=>{
-    const n=m.income-m.expense; const p=m.income>0?Math.round(n/m.income*100):0;
-    return `<tr><td><strong>${m.month}</strong></td><td class="g">${fmt(m.income)}</td>
+    const n=m.income-m.expense; const p=pct(m.expense,m.income);
+    return `<tr><td><strong>${m.month}</strong></td>
+      <td class="g">${fmt(m.income)}</td>
       <td class="r">${fmt(m.expense)}</td>
       <td class="${n>=0?'g':'r'}">${n>=0?'+':''}${fmt(n)}</td>
-      <td style="color:${n>=0?'#27AE60':'#E74C3C'}">${p}%</td></tr>`;
+      <td style="color:${p>80?'#E74C3C':p>60?'#F39C12':'#27AE60'};font-weight:600">${p}%</td></tr>`;
   }).join('');
 
-  // Recs
+  // Рекомендации
   const icons={check:'✅',alert:'🔴',info:'ℹ️',trend:'📈'};
   document.getElementById('recList').innerHTML=(d.recommendations||[]).map(r=>
-    `<div class="rec ${r.type}"><span class="rec-icon">${icons[r.icon]||'ℹ️'}</span>
+    `<div class="rec ${r.type}"><span style="font-size:14px">${icons[r.icon]||'ℹ️'}</span>
     <div><div class="rec-t">${r.title}</div><div class="rec-d">${r.text}</div></div></div>`
   ).join('');
 }
 
-function downloadExcel(){ window.location.href='/download-excel'; }
+function downloadExcel(){window.location.href='/download-excel';}
 function resetForm(){
   files=[];
   document.getElementById('fileList').innerHTML='';
-  document.getElementById('uploadSection').style.display='block';
-  document.getElementById('results').style.display='none';
+  show('uploadSection'); hide('results');
   document.getElementById('analyzeBtn').disabled=true;
   document.getElementById('addedBadge').style.display='none';
   dz.classList.remove('has-files');
