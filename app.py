@@ -27,6 +27,7 @@ def border_thin():
     return Border(left=s, right=s, top=s, bottom=s)
 
 CATEGORIES = {
+    "Перевод собственнику": ["карту kaspi gold","kaspi gold *"],
     "Зарплата / доход":    ["зарплат","salary","оклад","выплат","начислен"],
     "Доход от клиентов":   ["клиент","оплат","консалт","услуг","гонорар","вознагражд"],
     "Переводы входящие":   ["перевод","transfer","пополнен"],
@@ -44,6 +45,25 @@ CATEGORIES = {
     "IT / сервисы":        ["it","разработк","программ","software","хостинг"],
     "Инвестиции":          ["инвестиц","депозит","брокер","акци","облигац"],
 }
+
+
+# Признаки внутренних переводов (между своими счетами) — исключаются из P&L
+INTERNAL_PATTERNS = [
+    "kaspipay на депозит",
+    "депозит u35337359",
+    "перевод со счета u35337359",
+    "перевод со счета kaspipay",
+    "со своего kaspi gold на счет в kaspi pay",   # поступление от собственника — внутреннее
+    "собственных средств на свой счет в другом банке",
+    "переводы между счетами",
+    "между своими счетами",
+    "между счетами. без ндс",
+    "перевод с карты на счет ип",
+]
+
+def is_internal(desc):
+    d = str(desc).lower()
+    return any(p in d for p in INTERNAL_PATTERNS)
 
 def categorize(desc):
     d = str(desc).lower()
@@ -128,6 +148,8 @@ def parse_kaspi(filepath):
                     desc = str(row.get(name_col, "")).strip() if name_col else ""
                 if desc == "nan": desc = ""
 
+                cat = categorize(desc)
+                internal = is_internal(desc)
                 transactions.append({
                     "date":  date.strftime("%Y-%m-%d"),
                     "month": date.strftime("%Y-%m"),
@@ -135,9 +157,10 @@ def parse_kaspi(filepath):
                     "description": desc,
                     "debit":  debit,
                     "credit": credit,
-                    "category": categorize(desc),
+                    "category": "Внутренний перевод" if internal else cat,
                     "type":   "expense" if debit > 0 else "income",
                     "amount": debit if debit > 0 else credit,
+                    "internal": internal,
                 })
             except: continue
     except Exception as e:
@@ -188,6 +211,8 @@ def parse_bcc(filepath):
                 desc = str(row.get(desc_col, "")).strip() if desc_col else ""
                 if desc == "nan": desc = ""
 
+                cat = categorize(desc)
+                internal = is_internal(desc)
                 transactions.append({
                     "date":  date.strftime("%Y-%m-%d"),
                     "month": date.strftime("%Y-%m"),
@@ -195,9 +220,10 @@ def parse_bcc(filepath):
                     "description": desc,
                     "debit":  debit,
                     "credit": credit,
-                    "category": categorize(desc),
+                    "category": "Внутренний перевод" if internal else cat,
                     "type":   "expense" if debit > 0 else "income",
                     "amount": debit if debit > 0 else credit,
+                    "internal": internal,
                 })
             except: continue
     except Exception as e:
@@ -241,14 +267,17 @@ def parse_file(filepath, bank):
                     if any(k in col.lower() for k in ["назначен","описан","получатель","контрагент","purpose"]):
                         v = str(row.get(col,"")).strip()
                         if v and v.lower() != "nan": desc = v; break
+                cat = categorize(desc)
+                internal = is_internal(desc)
                 transactions.append({
                     "date": date.strftime("%Y-%m-%d"),
                     "month": date.strftime("%Y-%m"),
                     "bank": bank, "description": desc,
                     "debit": debit, "credit": credit,
-                    "category": categorize(desc),
+                    "category": "Внутренний перевод" if internal else cat,
                     "type": "expense" if debit > 0 else "income",
                     "amount": debit if debit > 0 else credit,
+                    "internal": internal,
                 })
             except: continue
     except Exception as e:
@@ -287,13 +316,19 @@ def merge_transactions(existing, new_txns):
 # ─── АНАЛИТИКА ────────────────────────────────────────────────────────────────
 
 def build_analytics(all_transactions):
-    total_inc = clean(sum(t["credit"] for t in all_transactions))
-    total_exp = clean(sum(t["debit"]  for t in all_transactions))
+    # Внутренние переводы между своими счетами исключаем из P&L
+    business_txns = [t for t in all_transactions if not t.get("internal")]
+    internal_txns = [t for t in all_transactions if t.get("internal")]
+
+    total_inc = clean(sum(t["credit"] for t in business_txns))
+    total_exp = clean(sum(t["debit"]  for t in business_txns))
+    internal_out = clean(sum(t["debit"]  for t in internal_txns))
+    internal_in  = clean(sum(t["credit"] for t in internal_txns))
     net = clean(total_inc - total_exp)
 
     cat_exp = defaultdict(float)
     cat_inc = defaultdict(float)
-    for t in all_transactions:
+    for t in all_transactions:  # Показываем все категории включая личные
         if t["type"] == "expense": cat_exp[t["category"]] += t["debit"]
         else: cat_inc[t["category"]] += t["credit"]
 
@@ -302,7 +337,7 @@ def build_analytics(all_transactions):
 
     # По месяцам
     monthly = defaultdict(lambda: {"income": 0.0, "expense": 0.0})
-    for t in all_transactions:
+    for t in business_txns:  # Только бизнес операции в динамике
         if t["type"] == "income": monthly[t["month"]]["income"] += t["credit"]
         else: monthly[t["month"]]["expense"] += t["debit"]
     monthly_sorted = [{"month": m, "income": clean(v["income"]), "expense": clean(v["expense"])}
@@ -311,7 +346,7 @@ def build_analytics(all_transactions):
     # Расходы по категориям и месяцам
     months_list = [m["month"] for m in monthly_sorted]
     cat_monthly = defaultdict(lambda: defaultdict(float))
-    for t in all_transactions:
+    for t in all_transactions:  # Все категории в таблице
         if t["type"] == "expense":
             cat_monthly[t["category"]][t["month"]] += t["debit"]
 
@@ -339,6 +374,9 @@ def build_analytics(all_transactions):
         "total": len(all_transactions),
         "total_income": total_inc,
         "total_expense": total_exp,
+        "internal_out": internal_out,
+        "internal_in": internal_in,
+        "internal_count": len(internal_txns),
         "net_cashflow": net,
         "banks": banks_list,
         "months": months_list,
