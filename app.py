@@ -242,7 +242,7 @@ def generate_recommendations(txns, inc, exp, net, cat_exp, monthly):
     tax = cat_exp.get("Налоги / взносы", 0)
     if tax > 0:
         recs.append({"type":"info","icon":"info","title":"Налоговая нагрузка",
-            "text":f"Уплачено: {tax:,.0f} ₸ ({tax/exp*100:.1f}% расходов). Проверьте применение вычетов."})
+            "text":f"Уплачено: {tax:,.0f} ₸ ({tax/exp*100:.1f} if exp > 0 else 0% расходов). Проверьте применение вычетов."})
     if not recs:
         recs.append({"type":"success","icon":"check","title":"Финансовые показатели в норме",
             "text":"Структура доходов и расходов сбалансирована."})
