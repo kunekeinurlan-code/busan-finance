@@ -53,8 +53,14 @@ def categorize(desc):
 
 def parse_amount(val):
     if val is None: return 0.0
+    import math
+    if isinstance(val, float) and math.isnan(val): return 0.0
     try:
-        return float(str(val).replace(" ","").replace("\u202f","").replace(",","."))
+        s = str(val).strip()
+        # Убираем все виды пробелов и неразрывные пробелы
+        s = s.replace("\xa0","").replace("\u202f","").replace("\u00a0","").replace(" ","")
+        s = s.replace(",",".")
+        return float(s)
     except: return 0.0
 
 def clean(v):
@@ -64,20 +70,150 @@ def clean(v):
 def detect_bank(filename, filepath):
     fn = filename.lower()
     if "kaspi" in fn: return "Kaspi"
+    if "бцк" in fn or "bcc" in fn or "bck" in fn or "centercredit" in fn or "цк" in fn: return "БЦК"
     if "halyk" in fn or "народный" in fn: return "Halyk"
     if "freedom" in fn or "ffin" in fn: return "Freedom"
     try:
         df = pd.read_excel(filepath, header=None, nrows=10)
         text = " ".join(df.fillna("").astype(str).values.flatten()).lower()
         if "kaspi" in text: return "Kaspi"
+        if "центркредит" in text or "centercredit" in text or "kcjbkzkx" in text: return "БЦК"
         if "halyk" in text or "народный" in text: return "Halyk"
         if "freedom" in text or "ffin" in text: return "Freedom"
     except: pass
     return "Другой"
 
+
+
+def parse_kaspi(filepath):
+    """Парсер выписки Kaspi Bank"""
+    transactions = []
+    try:
+        engine = "xlrd" if filepath.endswith(".xls") else "openpyxl"
+        raw = pd.read_excel(filepath, header=None, engine=engine)
+
+        header_row = None
+        for i, row in raw.iterrows():
+            vals = [str(v) for v in row.values]
+            if any("Дата операции" in v or "Дата" in v for v in vals) and any("Дебет" in v for v in vals):
+                header_row = i
+                break
+        if header_row is None:
+            return transactions
+
+        df = pd.read_excel(filepath, skiprows=header_row, header=0, engine=engine)
+        df.columns = [str(c).strip() for c in df.columns]
+
+        date_col   = next((c for c in df.columns if "Дата" in c), None)
+        debit_col  = next((c for c in df.columns if c.strip() == "Дебет"), None)
+        credit_col = next((c for c in df.columns if c.strip() == "Кредит"), None)
+        desc_col   = next((c for c in df.columns if "Назначение" in c), None)
+        name_col   = next((c for c in df.columns if "бенефициара" in c or "Наименование" in c), None)
+
+        if not date_col: return transactions
+
+        for _, row in df.iterrows():
+            try:
+                date_str = str(row.get(date_col, "")).strip()
+                if not date_str or date_str == "nan": continue
+                date = pd.to_datetime(date_str[:10], dayfirst=True, errors="coerce")
+                if pd.isna(date): continue
+
+                debit  = parse_amount(row.get(debit_col,  0)) if debit_col  else 0.0
+                credit = parse_amount(row.get(credit_col, 0)) if credit_col else 0.0
+                if debit == 0 and credit == 0: continue
+
+                desc = str(row.get(desc_col, "")).strip() if desc_col else ""
+                if desc == "nan" or not desc:
+                    desc = str(row.get(name_col, "")).strip() if name_col else ""
+                if desc == "nan": desc = ""
+
+                transactions.append({
+                    "date":  date.strftime("%Y-%m-%d"),
+                    "month": date.strftime("%Y-%m"),
+                    "bank":  "Kaspi",
+                    "description": desc,
+                    "debit":  debit,
+                    "credit": credit,
+                    "category": categorize(desc),
+                    "type":   "expense" if debit > 0 else "income",
+                    "amount": debit if debit > 0 else credit,
+                })
+            except: continue
+    except Exception as e:
+        print(f"Kaspi parse error: {e}")
+    return transactions
+
+def parse_bcc(filepath):
+    """Парсер выписки Банк ЦентрКредит (БЦК)"""
+    transactions = []
+    try:
+        engine = "xlrd" if filepath.endswith(".xls") else "openpyxl"
+        raw = pd.read_excel(filepath, header=None, engine=engine)
+
+        # Ищем строку-заголовок (содержит "Дебет" и "Кредит")
+        header_row = None
+        for i, row in raw.iterrows():
+            vals = [str(v) for v in row.values]
+            if any("Дебет" in v or "Дата" in v for v in vals) and any("Кредит" in v for v in vals):
+                header_row = i
+                break
+        if header_row is None:
+            return transactions
+
+        df = pd.read_excel(filepath, skiprows=header_row, header=0, engine=engine)
+        df.columns = [str(c).strip() for c in df.columns]
+
+        # Находим нужные колонки
+        date_col  = next((c for c in df.columns if "Дата" in c or "Күні" in c), None)
+        debit_col = next((c for c in df.columns if "Дебет" in c), None)
+        credit_col= next((c for c in df.columns if "Кредит" in c and "конверт" not in c.lower()), None)
+        desc_col  = next((c for c in df.columns if "Назначение" in c or "мақсаты" in c), None)
+
+        if not date_col: return transactions
+
+        for _, row in df.iterrows():
+            try:
+                date_str = str(row.get(date_col, "")).strip()
+                if not date_str or date_str == "nan": continue
+                # Формат даты БЦК: "26.12.2025 06:10:02"
+                date = pd.to_datetime(date_str[:10], dayfirst=True, errors="coerce")
+                if pd.isna(date): continue
+
+                debit  = parse_amount(row.get(debit_col,  0)) if debit_col  else 0.0
+                credit = parse_amount(row.get(credit_col, 0)) if credit_col else 0.0
+
+                if debit == 0 and credit == 0: continue
+
+                desc = str(row.get(desc_col, "")).strip() if desc_col else ""
+                if desc == "nan": desc = ""
+
+                transactions.append({
+                    "date":  date.strftime("%Y-%m-%d"),
+                    "month": date.strftime("%Y-%m"),
+                    "bank":  "БЦК",
+                    "description": desc,
+                    "debit":  debit,
+                    "credit": credit,
+                    "category": categorize(desc),
+                    "type":   "expense" if debit > 0 else "income",
+                    "amount": debit if debit > 0 else credit,
+                })
+            except: continue
+    except Exception as e:
+        print(f"БЦК parse error: {e}")
+    return transactions
+
+
 def parse_file(filepath, bank):
     transactions = []
     try:
+        # БЦК имеет нестандартный формат — специальный парсер
+        if bank == "БЦК":
+            return parse_bcc(filepath)
+        if bank == "Kaspi":
+            return parse_kaspi(filepath)
+
         raw = pd.read_excel(filepath, header=None, nrows=20)
         header_row = None
         for i, row in raw.iterrows():
