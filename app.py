@@ -272,9 +272,6 @@ def require_auth():
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
-    if not require_auth():
-        return jsonify({"error": "Требуется авторизация"}), 401
-
     files = request.files.getlist("files")
     mode  = request.form.get("mode", "append")  # append | replace
 
@@ -325,8 +322,6 @@ def analyze():
 
 @app.route("/db-stats", methods=["GET"])
 def db_stats():
-    if not require_auth():
-        return jsonify({"error": "Требуется авторизация"}), 401
     db = load_db()
     txns = db["transactions"]
     return jsonify({
@@ -338,16 +333,12 @@ def db_stats():
 
 @app.route("/db-clear", methods=["POST"])
 def db_clear():
-    if not require_auth():
-        return jsonify({"error": "Требуется авторизация"}), 401
     save_db({"transactions": [], "updated_at": None})
     return jsonify({"ok": True})
 
 @app.route("/db-analyze", methods=["GET"])
 def db_analyze():
     """Показать аналитику по всей накопленной базе без загрузки файлов"""
-    if not require_auth():
-        return jsonify({"error": "Требуется авторизация"}), 401
     db = load_db()
     if not db["transactions"]:
         return jsonify({"error": "База данных пуста"}), 400
@@ -361,8 +352,6 @@ def db_analyze():
 
 @app.route("/download-excel")
 def download_excel():
-    if not require_auth():
-        return jsonify({"error": "Требуется авторизация"}), 401
     try:
         with open("/tmp/busan_txns.json", "r", encoding="utf-8") as f:
             txns = json.load(f)
