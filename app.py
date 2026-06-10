@@ -1,3 +1,4 @@
+
 from flask import Flask, request, jsonify, send_file, send_from_directory
 import os, json, io
 from datetime import datetime
@@ -7,7 +8,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-app = Flask(__name__, static_folder="static")
+app = Flask(__name__)
 
 NAVY  = "1A1A2E"
 GOLD  = "D4A017"
@@ -224,7 +225,7 @@ def generate_excel(transactions):
 
 @app.route("/")
 def index():
-    return send_from_directory("static", "index.html")
+    return send_file("index.html")
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
