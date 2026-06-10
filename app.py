@@ -27,24 +27,31 @@ def border_thin():
     return Border(left=s, right=s, top=s, bottom=s)
 
 CATEGORIES = {
-    "Перевод собственнику": ["карту kaspi gold","kaspi gold *"],
-    "Выручка Kaspi.kz":    ["продажи с kaspi.kz","возмещение коммерсанту","kaspi магазин","kaspi pay"],
-    "Зарплата / доход":    ["зарплат","salary","оклад","выплата зарплат","начисление зарплат"],
-    "Доход от клиентов":   ["поступление от клиент","оплата от клиент","консалтинг","гонорар","вознагражд","выручка"],
-    "Переводы входящие":   ["пополнен"],
-    "Налоги / взносы":     ["налог","ипн","соц","пенсион","опв","снп","осмс","источника выплаты","облагаемых","пп рк","единый совокупный"],
-    "Аренда":              ["аренд","rent","найм"],
-    "Продукты / питание":  ["магазин","супермарк","продукт","еда","food","market","magnum","small"],
-    "Кафе / рестораны":    ["кафе","ресторан","cafe","restaurant","coffee","кофе","bar"],
-    "Транспорт":           ["такси","uber","yandex","яндекс","bolt","автобус","транспорт","parking"],
-    "Связь / интернет":    ["beeline","kcell","activ","altel","tele2","билайн","интернет","связь"],
-    "Подписки / сервисы":  ["netflix","spotify","apple","google","youtube","подписк"],
-    "Образование":         ["курс","обучен","образован","школ","универс","тренинг","семинар"],
-    "Здоровье / медицина": ["аптек","клиник","больниц","медицин","pharmacy","dental","стомат"],
-    "Красота / уход":      ["салон","beauty","spa","cosmetic","косметик"],
-    "Банковские расходы":  ["комисси","обслуживан","штраф","пени","оплата за информационно","оплата услуги по обработке","оплата услуг по обработке"],
-    "IT / сервисы":        ["it","разработк","программ","software","хостинг"],
-    "Инвестиции":          ["инвестиц","депозит","брокер","акци","облигац"],
+    "Перевод собственнику":  ["карту kaspi gold","kaspi gold *"],
+    "Выручка Kaspi.kz":      ["продажи с kaspi.kz","возмещение коммерсанту"],
+    "Зарплата / ФОТ":        ["оплата заработной платы","заработная плата","зарплата","salary","оклад","выплата зарплат","фот"],
+    "Налоги / взносы":       ["налог","ипн","соц","пенсион","опв","снп","осмс","источника выплаты","облагаемых","единый совокупный","астана ерц","ерц"],
+    "Аренда":                ["аренд","rent","найм"],
+    "Реклама / маркетинг":   ["реклам","маркетинг","продвижен","smm","таргет","instagram","facebook","google ads","яндекс директ","объявлен","рекламных услуг"],
+    "Процессинг / эквайринг":["процессинг","эквайринг","расчеты по картам","расчеты по карточкам","pos-терминал","pos терминал","acquiring","расчёты по карт","услуги процессинга","услуг процессинга","оплата за услуги операций по картам"],
+    "Логистика / курьер":    ["доставк","логистик","курьер","express","dhl","cdek","сдэк","почтовые"],
+    "Кредит / займ":         ["погашение","бизнес кредит","кредит","займ","ссуда","резервирование средств"],
+    "Возврат покупателю":    ["возврат продаж","возврат средств","возврат оплаты","за непредоставленные усл"],
+    "Продукты / питание":    ["магазин","супермарк","продукт","еда","food","market","magnum","small"],
+    "Кафе / рестораны":      ["кафе","ресторан","cafe","restaurant","coffee","кофе"],
+    "Транспорт":             ["такси","uber","yandex go","яндекс такси","bolt","автобус","транспорт","parking"],
+    "Связь / интернет":      ["beeline","kcell","activ","altel","tele2","билайн","интернет","связь"],
+    "Подписки / сервисы":    ["netflix","spotify","apple","youtube","подписк"],
+    "Образование":           ["курс","обучен","образован","школ","универс","тренинг","семинар"],
+    "Здоровье / медицина":   ["аптек","клиник","больниц","медицин","pharmacy","dental","стомат","europharma"],
+    "Красота / уход":        ["салон","beauty","spa","cosmetic","косметик"],
+    "Банковские расходы":    ["комисси","обслуживан","штраф","пени","оплата за информационно","оплата услуги по обработке","оплата услуг по обработке","за операций по картам","страховую премию","страхован"],
+    "IT / сервисы":          ["it","разработк","программ","software","хостинг","домен"],
+    "Инвестиции":            ["инвестиц","депозит","брокер","акци","облигац"],
+    "Профессиональные услуги":["профессиональные","научные и технические","консультац","юридич","бухгалтер","нотариус"],
+    "Доход от клиентов":     ["поступление от клиент","оплата от клиент","гонорар","вознагражд","выручка","комисс омк","перевод денежных средств по дог"],
+    "Выручка по карточкам":  ["расчеты по карточкам","расчёты по карточкам","расчеты по картам","расчёты по картам","зачисление по pos","зачисл по pos","by card","эквайринг зачислен"],
+    "Торговая выручка":      ["за товары","оплата за товар","реализац товар","расчет за товар"],
 }
 
 
@@ -57,6 +64,8 @@ INTERNAL_PATTERNS = [
     "со своего kaspi gold на счет в kaspi pay",   # поступление от собственника — внутреннее
     "собственных средств на свой счет в другом банке",
     "переводы между счетами",
+    "переводы клиентом денег с одного своего",
+    "без ндс. переводы клиентом",
     "между своими счетами",
     "между счетами. без ндс",
     "перевод с карты на счет ип",
@@ -92,14 +101,14 @@ def detect_bank(filename, filepath):
     fn = filename.lower()
     if "kaspi" in fn: return "Kaspi"
     if "бцк" in fn or "bcc" in fn or "bck" in fn or "centercredit" in fn or "цк" in fn: return "БЦК"
-    if "halyk" in fn or "народный" in fn: return "Halyk"
+    if "halyk" in fn or "народн" in fn or "hsbk" in fn: return "Halyk"
     if "freedom" in fn or "ffin" in fn: return "Freedom"
     try:
         df = pd.read_excel(filepath, header=None, nrows=10)
         text = " ".join(df.fillna("").astype(str).values.flatten()).lower()
         if "kaspi" in text: return "Kaspi"
         if "центркредит" in text or "centercredit" in text or "kcjbkzkx" in text: return "БЦК"
-        if "halyk" in text or "народный" in text: return "Halyk"
+        if "halyk" in text or "народный" in text or "hsbkkzkx" in text or "народный банк" in text: return "Halyk"
         if "freedom" in text or "ffin" in text: return "Freedom"
     except: pass
     return "Другой"
@@ -166,6 +175,92 @@ def parse_kaspi(filepath):
             except: continue
     except Exception as e:
         print(f"Kaspi parse error: {e}")
+    return transactions
+
+
+def parse_halyk(filepath):
+    """Парсер выписки Halyk Bank (Народный Банк)"""
+    transactions = []
+    try:
+        engine = "xlrd" if filepath.endswith(".xls") else "openpyxl"
+        raw = pd.read_excel(filepath, header=None, engine=engine)
+
+        # Ищем строку заголовка — содержит Дебет И Кредит И Назначение
+        header_row = None
+        for i, row in raw.iterrows():
+            vals = [str(v) for v in row.values]
+            has_debit   = any("Дебет" in v for v in vals)
+            has_credit  = any("Кредит" in v for v in vals)
+            has_purpose = any("Назначение" in v or "назначение" in v for v in vals)
+            if has_debit and has_credit and has_purpose:
+                header_row = i
+                break
+
+        if header_row is None:
+            return transactions
+
+        df = pd.read_excel(filepath, skiprows=header_row, header=0, engine=engine)
+        df.columns = [str(c).strip() for c in df.columns]
+
+        # Ищем колонки по названию
+        date_col    = next((c for c in df.columns if "Дата" in c), None)
+        debit_col   = next((c for c in df.columns if c.strip() == "Дебет"), None)
+        credit_col  = next((c for c in df.columns if c.strip() == "Кредит"), None)
+        desc_col    = next((c for c in df.columns if "Назначение" in c), None)
+        # Fallback — берём последнюю текстовую колонку перед числовыми
+        if not desc_col:
+            desc_col = next((c for c in reversed(df.columns) if "назначен" in c.lower() or "платеж" in c.lower()), None)
+
+        if not date_col or not desc_col:
+            return transactions
+
+        for _, row in df.iterrows():
+            try:
+                date_str = str(row.get(date_col, "")).strip()
+                if not date_str or date_str in ("nan", "Итого оборот", "Исходящий"):
+                    continue
+                date = pd.to_datetime(date_str[:10], dayfirst=True, errors="coerce")
+                if pd.isna(date):
+                    continue
+
+                debit  = parse_amount(row.get(debit_col,  0)) if debit_col  else 0.0
+                credit = parse_amount(row.get(credit_col, 0)) if credit_col else 0.0
+                if debit == 0 and credit == 0:
+                    continue
+
+                desc = str(row.get(desc_col, "")).strip()
+                if desc in ("nan", ""):
+                    # Попробуем взять из колонки Контрагент
+                    cont_col = next((c for c in df.columns if "Контрагент" in c), None)
+                    if cont_col:
+                        desc = str(row.get(cont_col, "")).strip()
+                if desc == "nan":
+                    desc = ""
+
+                cat = categorize(desc)
+                internal = is_internal(desc)
+
+                # Расчеты по карточкам Halyk — это выручка
+                if "расчеты по карточкам" in desc.lower() or "расчёты по карточкам" in desc.lower():
+                    cat = "Выручка по карточкам"
+                    internal = False
+
+                transactions.append({
+                    "date":  date.strftime("%Y-%m-%d"),
+                    "month": date.strftime("%Y-%m"),
+                    "bank":  "Halyk",
+                    "description": desc,
+                    "debit":  debit,
+                    "credit": credit,
+                    "category": "Внутренний перевод" if internal else cat,
+                    "type":   "expense" if debit > 0 else "income",
+                    "amount": debit if debit > 0 else credit,
+                    "internal": internal,
+                })
+            except:
+                continue
+    except Exception as e:
+        print(f"Halyk parse error: {e}")
     return transactions
 
 def parse_bcc(filepath):
@@ -240,6 +335,8 @@ def parse_file(filepath, bank):
             return parse_bcc(filepath)
         if bank == "Kaspi":
             return parse_kaspi(filepath)
+        if bank in ("Halyk", "Народный"):
+            return parse_halyk(filepath)
 
         raw = pd.read_excel(filepath, header=None, nrows=20)
         header_row = None
@@ -345,7 +442,7 @@ def build_analytics(all_transactions):
                       for m, v in sorted(monthly.items())]
 
     # Категории которые никогда не бывают расходами
-    INCOME_ONLY_CATS = {"Зарплата / доход", "Доход от клиентов", "Выручка Kaspi.kz", "Переводы входящие"}
+    INCOME_ONLY_CATS = {"Зарплата / доход", "Доход от клиентов", "Выручка Kaspi.kz", "Выручка по карточкам", "Торговая выручка", "Переводы входящие", "Выручка по карточкам Halyk"}
 
     # Расходы по категориям и месяцам
     months_list = [m["month"] for m in monthly_sorted]
@@ -364,7 +461,7 @@ def build_analytics(all_transactions):
     cat_monthly_table.sort(key=lambda x: -x["total"])
 
     # Категории которые никогда не бывают поступлениями
-    EXPENSE_ONLY_CATS = {"Налоги / взносы", "Аренда", "Транспорт", "Банковские расходы",
+    EXPENSE_ONLY_CATS = {"Налоги / взносы", "Аренда", "Транспорт", "Банковские расходы", "Кредит / займ", "Зарплата / ФОТ", "Реклама / маркетинг", "Процессинг / эквайринг", "Логистика / курьер",
                          "Связь / интернет", "Подписки / сервисы", "Образование",
                          "Здоровье / медицина", "Красота / уход", "IT / сервисы",
                          "Перевод собственнику", "Внутренний перевод"}
