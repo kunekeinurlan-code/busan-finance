@@ -159,6 +159,15 @@ main{max-width:1120px;margin:0 auto;padding:28px 20px 80px}
 .heat-high{background:#FEE2E2!important;color:#DC2626;font-weight:700}
 .heat-mid{background:#FEF3C7!important;color:#92400E}
 
+
+/* BANK LOGOS */
+.bank-logo{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;letter-spacing:-0.5px;flex-shrink:0}
+.bank-logo.kaspi{background:#E8192C;color:#fff}
+.bank-logo.halyk{background:#00A650;color:#fff}
+.bank-logo.freedom{background:#0055A5;color:#fff}
+.bank-logo.bcc{background:#FF6B00;color:#fff}
+.bank-logo.other{background:#6B7280;color:#fff}
+
 /* RECS */
 .rec-list{display:flex;flex-direction:column;gap:8px}
 .rec{display:flex;gap:10px;padding:10px 14px;border-radius:8px;border:1px solid}
@@ -266,10 +275,16 @@ footer{text-align:center;padding:18px;font-size:11px;color:var(--muted);border-t
       </div>
     </div>
 
-    <!-- Гистограмма -->
-    <div class="sec">
-      <div class="sec-title"><span class="dot gold"></span>Поступления и расходы по месяцам</div>
-      <div class="chart-wrap"><canvas id="monthlyChart"></canvas></div>
+    <!-- Гистограмма + Пирог -->
+    <div class="two">
+      <div class="sec">
+        <div class="sec-title"><span class="dot gold"></span>Поступления и расходы по месяцам</div>
+        <div class="chart-wrap"><canvas id="monthlyChart"></canvas></div>
+      </div>
+      <div class="sec">
+        <div class="sec-title"><span class="dot r"></span>Структура расходов</div>
+        <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
+      </div>
     </div>
 
     <!-- РАСХОДЫ -->
@@ -332,7 +347,7 @@ footer{text-align:center;padding:18px;font-size:11px;color:var(--muted);border-t
 <footer>BUSAN FINANCE · KUNEKEI GROUP · Данные защищены · Файлы не хранятся на сервере</footer>
 
 <script>
-let files=[], mode='append', mChart=null;
+let files=[], mode='append', mChart=null, pChart=null;
 
 async function doLogin(){
   const r=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:document.getElementById('pwdInput').value})});
@@ -408,6 +423,22 @@ async function analyze(){
 }
 
 function fmt(n){return new Intl.NumberFormat('ru-RU').format(Math.round(n||0));}
+function bankCls(name){
+  const n=(name||'').toLowerCase();
+  if(n.includes('kaspi')) return 'kaspi';
+  if(n.includes('halyk')||n.includes('народ')) return 'halyk';
+  if(n.includes('freedom')||n.includes('ffin')) return 'freedom';
+  if(n.includes('бцк')||n.includes('центркред')) return 'bcc';
+  return 'other';
+}
+function bankAbbr(name){
+  const n=(name||'').toLowerCase();
+  if(n.includes('kaspi')) return 'K';
+  if(n.includes('halyk')||n.includes('народ')) return 'H';
+  if(n.includes('freedom')||n.includes('ffin')) return 'FF';
+  if(n.includes('бцк')||n.includes('центркред')) return 'БЦК';
+  return name.substring(0,2).toUpperCase();
+}
 function pct(a,b){return b>0?Math.round(a/b*100):0;}
 
 function renderResults(d){
@@ -469,6 +500,20 @@ function renderResults(d){
     }
   });
 
+  // Pie chart расходов
+  if(pChart) pChart.destroy();
+  const pieData=(d.cat_monthly||[]).filter(r=>r.total>0);
+  const pieColors=['#E74C3C','#E67E22','#F39C12','#8E44AD','#2980B9','#1ABC9C','#D35400','#27AE60','#C0392B','#16A085'];
+  pChart=new Chart(document.getElementById('pieChart').getContext('2d'),{
+    type:'doughnut',
+    data:{
+      labels:pieData.map(r=>r.category),
+      datasets:[{data:pieData.map(r=>Math.round(r.total)),backgroundColor:pieColors,borderWidth:0,hoverOffset:5}]
+    },
+    options:{responsive:true,maintainAspectRatio:false,cutout:'55%',
+      plugins:{legend:{position:'right',labels:{font:{size:9},boxWidth:9,padding:5}}}}
+  });
+
   // РАСХОДЫ по категориям
   const catExp=d.cat_monthly||[];
   const expOnly=catExp.filter(r=>r.total>0);
@@ -484,7 +529,10 @@ function renderResults(d){
   // РАСХОДЫ по банкам
   document.getElementById('expBanks').innerHTML=(d.banks||[]).map(b=>`
     <div class="bank-row">
-      <span class="bank-name-cell">🏦 ${b.bank}</span>
+      <div style="display:flex;align-items:center;gap:8px;min-width:90px">
+        <div class="bank-logo ${bankCls(b.bank)}">${bankAbbr(b.bank)}</div>
+        <span class="bank-name-cell" style="min-width:auto">${b.bank}</span>
+      </div>
       <div class="bank-nums">
         <div class="bank-num"><div class="bank-num-lbl">Расходы</div><div class="bank-num-val r">${fmt(b.expense)} ₸</div></div>
         <div class="bank-num"><div class="bank-num-lbl">Доля</div><div class="bank-num-val">${pct(b.expense,d.total_expense)}%</div></div>
@@ -505,7 +553,10 @@ function renderResults(d){
   // ПОСТУПЛЕНИЯ по банкам
   document.getElementById('incBanks').innerHTML=(d.banks||[]).map(b=>`
     <div class="bank-row">
-      <span class="bank-name-cell">🏦 ${b.bank}</span>
+      <div style="display:flex;align-items:center;gap:8px;min-width:90px">
+        <div class="bank-logo ${bankCls(b.bank)}">${bankAbbr(b.bank)}</div>
+        <span class="bank-name-cell" style="min-width:auto">${b.bank}</span>
+      </div>
       <div class="bank-nums">
         <div class="bank-num"><div class="bank-num-lbl">Поступления</div><div class="bank-num-val g">${fmt(b.income)} ₸</div></div>
         <div class="bank-num"><div class="bank-num-lbl">Доля</div><div class="bank-num-val">${pct(b.income,d.total_income)}%</div></div>
