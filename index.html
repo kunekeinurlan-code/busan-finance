@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUSAN FINANCE — Cashflow Аналитика</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy: #1A1A2E;
+    --navy2: #16213E;
+    --gold: #D4A017;
+    --gold-light: #F0C040;
+    --cream: #F8F6F0;
+    --white: #FFFFFF;
+    --green: #27AE60;
+    --red: #E74C3C;
+    --amber: #F39C12;
+    --blue: #2980B9;
+    --text: #1A1A2E;
+    --text-muted: #6B7280;
+    --border: #E5E7EB;
+    --surface: #F9F8F5;
+  }
+
+  body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--cream);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* HEADER */
+  header {
+    background: var(--navy);
+    padding: 0 40px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    border-bottom: 1px solid rgba(212,160,23,0.3);
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .logo-mark {
+    width: 36px; height: 36px;
+    background: var(--gold);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 14px; color: var(--navy);
+    letter-spacing: -0.5px;
+  }
+  .logo-text {
+    display: flex; flex-direction: column; line-height: 1.1;
+  }
+  .logo-name { font-size: 15px; font-weight: 700; color: var(--white); letter-spacing: 0.5px; }
+  .logo-sub  { font-size: 10px; color: var(--gold); letter-spacing: 2px; text-transform: uppercase; opacity: 0.8; }
+
+  .header-badge {
+    font-size: 11px; color: var(--gold); border: 1px solid rgba(212,160,23,0.4);
+    padding: 4px 12px; border-radius: 20px; letter-spacing: 0.5px;
+  }
+
+  /* MAIN */
+  main { max-width: 1100px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  /* UPLOAD ZONE */
+  .upload-section {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 48px 40px;
+    text-align: center;
+    margin-bottom: 32px;
+    transition: border-color 0.2s;
+  }
+  .upload-section.drag-over { border-color: var(--gold); background: #FDFBF4; }
+
+  .upload-icon {
+    width: 64px; height: 64px;
+    background: linear-gradient(135deg, #F8F4E8, #F0E8CC);
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 20px;
+    font-size: 28px;
+  }
+  .upload-title { font-size: 22px; font-weight: 700; color: var(--navy); margin-bottom: 8px; }
+  .upload-desc  { font-size: 14px; color: var(--text-muted); margin-bottom: 28px; line-height: 1.6; }
+
+  .bank-tags { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 28px; }
+  .bank-tag {
+    padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    border: 1.5px solid;
+  }
+  .bank-tag.kaspi  { background: #FEF2F2; color: #DC2626; border-color: #FCA5A5; }
+  .bank-tag.halyk  { background: #F0FDF4; color: #16A34A; border-color: #86EFAC; }
+  .bank-tag.freedom{ background: #EFF6FF; color: #2563EB; border-color: #93C5FD; }
+  .bank-tag.other  { background: #F9FAFB; color: #6B7280; border-color: #D1D5DB; }
+
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--surface);
+    position: relative;
+  }
+  .drop-zone:hover, .drop-zone.has-files { border-color: var(--gold); background: #FDFBF4; }
+  .drop-zone input[type="file"] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .drop-text { font-size: 14px; color: var(--text-muted); }
+  .drop-text span { color: var(--gold); font-weight: 600; cursor: pointer; }
+  .file-list { margin-top: 12px; text-align: left; }
+  .file-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; background: var(--white);
+    border: 1px solid var(--border); border-radius: 8px;
+    margin-top: 6px; font-size: 13px;
+  }
+  .file-item .file-icon { font-size: 16px; }
+  .file-item .file-name { flex: 1; font-weight: 500; }
+  .file-item .file-remove { color: var(--text-muted); cursor: pointer; font-size: 16px; line-height: 1; padding: 2px; }
+  .file-item .file-remove:hover { color: var(--red); }
+
+  .btn-analyze {
+    margin-top: 24px;
+    background: var(--navy);
+    color: var(--gold);
+    border: none; border-radius: 10px;
+    padding: 14px 40px;
+    font-size: 15px; font-weight: 700;
+    cursor: pointer; letter-spacing: 0.5px;
+    transition: all 0.2s;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn-analyze:hover { background: var(--navy2); transform: translateY(-1px); }
+  .btn-analyze:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  /* LOADING */
+  #loading {
+    display: none; text-align: center; padding: 60px 0;
+  }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* RESULTS */
+  #results { display: none; }
+
+  .results-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 24px; flex-wrap: gap;
+  }
+  .results-title { font-size: 20px; font-weight: 700; color: var(--navy); }
+  .results-meta  { font-size: 13px; color: var(--text-muted); }
+
+  .btn-download {
+    background: var(--gold); color: var(--navy);
+    border: none; border-radius: 8px;
+    padding: 10px 20px; font-size: 13px; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; gap: 6px;
+    transition: all 0.15s;
+  }
+  .btn-download:hover { background: var(--gold-light); }
+
+  /* KPI CARDS */
+  .kpi-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px; margin-bottom: 24px;
+  }
+  .kpi-card {
+    background: var(--white); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px;
+    position: relative; overflow: hidden;
+  }
+  .kpi-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0;
+    height: 3px; background: var(--navy);
+  }
+  .kpi-card.income::before  { background: var(--green); }
+  .kpi-card.expense::before { background: var(--red); }
+  .kpi-card.net::before     { background: var(--gold); }
+  .kpi-label { font-size: 11px; color: var(--text-muted); font-weight: 600;
+               text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .kpi-value { font-size: 22px; font-weight: 800; line-height: 1.1; color: var(--navy); }
+  .kpi-value.positive { color: var(--green); }
+  .kpi-value.negative { color: var(--red); }
+  .kpi-sub   { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+  /* SECTIONS */
+  .section { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+  .section-title {
+    font-size: 14px; font-weight: 700; color: var(--navy);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-bottom: 20px; padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-title .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--gold); flex-shrink: 0;
+  }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 720px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* CHARTS */
+  .chart-wrap { position: relative; height: 220px; }
+  .chart-wrap-tall { position: relative; height: 280px; }
+
+  /* BARS */
+  .bar-list { display: flex; flex-direction: column; gap: 10px; }
+  .bar-item { }
+  .bar-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .bar-label { font-size: 12px; color: var(--text); font-weight: 500; }
+  .bar-amount { font-size: 12px; color: var(--text-muted); font-weight: 600; }
+  .bar-track { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .bar-fill  { height: 100%; border-radius: 3px; background: var(--red); transition: width 0.6s ease; }
+  .bar-fill.income { background: var(--green); }
+
+  /* BANKS */
+  .bank-cards { display: flex; flex-wrap: wrap; gap: 12px; }
+  .bank-card {
+    flex: 1; min-width: 150px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .bank-name  { font-size: 13px; font-weight: 700; color: var(--navy); margin-bottom: 10px; }
+  .bank-row   { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+  .bank-row span:first-child { color: var(--text-muted); }
+  .bank-row .pos { color: var(--green); font-weight: 600; }
+  .bank-row .neg { color: var(--red); font-weight: 600; }
+
+  /* FILE BADGES */
+  .files-parsed { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+  .file-badge {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 8px;
+    font-size: 12px; font-weight: 600;
+    border: 1px solid var(--border); background: var(--surface);
+  }
+  .file-badge .badge-bank { color: var(--text-muted); font-weight: 400; }
+  .file-badge .badge-count {
+    background: var(--navy); color: var(--white);
+    padding: 2px 7px; border-radius: 10px; font-size: 11px;
+  }
+
+  /* RECOMMENDATIONS */
+  .rec-list { display: flex; flex-direction: column; gap: 10px; }
+  .rec-item {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 14px 16px; border-radius: 10px; border: 1px solid;
+  }
+  .rec-item.success { background: #F0FDF4; border-color: #86EFAC; }
+  .rec-item.warning { background: #FFFBEB; border-color: #FCD34D; }
+  .rec-item.danger  { background: #FEF2F2; border-color: #FCA5A5; }
+  .rec-item.info    { background: #EFF6FF; border-color: #93C5FD; }
+  .rec-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .rec-title { font-size: 13px; font-weight: 700; margin-bottom: 3px; }
+  .rec-text  { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+  .rec-item.success .rec-title { color: #15803D; }
+  .rec-item.warning .rec-title { color: #92400E; }
+  .rec-item.danger  .rec-title { color: #DC2626; }
+  .rec-item.info    .rec-title { color: #1D4ED8; }
+
+  /* MONTHLY TABLE */
+  .monthly-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .monthly-table th {
+    background: var(--navy); color: var(--gold);
+    padding: 8px 12px; text-align: left; font-weight: 600;
+    font-size: 11px; letter-spacing: 0.3px;
+  }
+  .monthly-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .monthly-table tr:nth-child(even) td { background: var(--surface); }
+  .monthly-table .pos { color: var(--green); font-weight: 600; }
+  .monthly-table .neg { color: var(--red); font-weight: 600; }
+
+  /* ERROR */
+  .error-box {
+    background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 10px;
+    padding: 16px 20px; color: #DC2626; font-size: 14px; margin-top: 16px;
+    display: none;
+  }
+
+  /* FOOTER */
+  footer {
+    text-align: center; padding: 24px;
+    font-size: 12px; color: var(--text-muted);
+    border-top: 1px solid var(--border);
+  }
+
+  .new-analysis-btn {
+    background: transparent; border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 16px; font-size: 13px;
+    color: var(--text-muted); cursor: pointer;
+    transition: all 0.15s;
+  }
+  .new-analysis-btn:hover { border-color: var(--navy); color: var(--navy); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">BF</div>
+    <div class="logo-text">
+      <span class="logo-name">BUSAN FINANCE</span>
+      <span class="logo-sub">Cashflow Analytics</span>
+    </div>
+  </div>
+  <span class="header-badge">KUNEKEI GROUP</span>
+</header>
+
+<main>
+
+  <!-- UPLOAD -->
+  <div class="upload-section" id="uploadSection">
+    <div class="upload-icon">📊</div>
+    <h1 class="upload-title">Анализ банковских выписок</h1>
+    <p class="upload-desc">
+      Загрузите выписки из любых банков — система автоматически<br>
+      консолидирует данные и сформирует полный cashflow отчёт
+    </p>
+    <div class="bank-tags">
+      <span class="bank-tag kaspi">Kaspi Bank</span>
+      <span class="bank-tag halyk">Halyk Bank</span>
+      <span class="bank-tag freedom">Freedom Bank</span>
+      <span class="bank-tag other">+ другие банки</span>
+    </div>
+
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" multiple accept=".xlsx,.xls">
+      <p class="drop-text">Перетащите файлы сюда или <span>выберите файлы</span></p>
+      <p class="drop-text" style="font-size:12px; margin-top:6px; opacity:0.7">Форматы: .xlsx, .xls</p>
+      <div class="file-list" id="fileList"></div>
+    </div>
+
+    <div class="error-box" id="errorBox"></div>
+
+    <button class="btn-analyze" id="analyzeBtn" onclick="analyze()" disabled>
+      <span>⚡</span> Анализировать
+    </button>
+  </div>
+
+  <!-- LOADING -->
+  <div id="loading">
+    <div class="spinner"></div>
+    <p style="color: var(--text-muted); font-size: 14px;">Обрабатываем выписки...</p>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="results">
+    <div class="results-header">
+      <div>
+        <div class="results-title">Cashflow отчёт</div>
+        <div class="results-meta" id="resultsMeta"></div>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button class="new-analysis-btn" onclick="resetForm()">← Новый анализ</button>
+        <button class="btn-download" onclick="downloadExcel()">
+          ⬇ Скачать Excel
+        </button>
+      </div>
+    </div>
+
+    <!-- Parsed files -->
+    <div class="files-parsed" id="filesBadges"></div>
+
+    <!-- KPI -->
+    <div class="kpi-grid">
+      <div class="kpi-card income">
+        <div class="kpi-label">Итого доходы</div>
+        <div class="kpi-value positive" id="kpiIncome">—</div>
+        <div class="kpi-sub" id="kpiIncomeSub"></div>
+      </div>
+      <div class="kpi-card expense">
+        <div class="kpi-label">Итого расходы</div>
+        <div class="kpi-value negative" id="kpiExpense">—</div>
+        <div class="kpi-sub" id="kpiExpenseSub"></div>
+      </div>
+      <div class="kpi-card net">
+        <div class="kpi-label">Чистый CF</div>
+        <div class="kpi-value" id="kpiNet">—</div>
+        <div class="kpi-sub" id="kpiNetSub"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Транзакций</div>
+        <div class="kpi-value" id="kpiTxns">—</div>
+        <div class="kpi-sub" id="kpiBanks"></div>
+      </div>
+    </div>
+
+    <!-- Charts row -->
+    <div class="two-col">
+      <div class="section">
+        <div class="section-title"><span class="dot"></span>Доходы / расходы по месяцам</div>
+        <div class="chart-wrap"><canvas id="monthlyChart"></canvas></div>
+      </div>
+      <div class="section">
+        <div class="section-title"><span class="dot"></span>Структура расходов</div>
+        <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Banks + top expenses -->
+    <div class="two-col">
+      <div class="section">
+        <div class="section-title"><span class="dot"></span>По банкам</div>
+        <div class="bank-cards" id="bankCards"></div>
+      </div>
+      <div class="section">
+        <div class="section-title"><span class="dot"></span>Топ категорий расходов</div>
+        <div class="bar-list" id="expBars"></div>
+      </div>
+    </div>
+
+    <!-- Monthly table -->
+    <div class="section">
+      <div class="section-title"><span class="dot"></span>Помесячная динамика</div>
+      <div style="overflow-x:auto;">
+        <table class="monthly-table">
+          <thead>
+            <tr>
+              <th>Месяц</th>
+              <th>Доходы (₸)</th>
+              <th>Расходы (₸)</th>
+              <th>Чистый CF (₸)</th>
+              <th>Баланс</th>
+            </tr>
+          </thead>
+          <tbody id="monthlyBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Recommendations -->
+    <div class="section">
+      <div class="section-title"><span class="dot"></span>Рекомендации</div>
+      <div class="rec-list" id="recList"></div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  BUSAN FINANCE · KUNEKEI GROUP · Конфиденциальность данных гарантирована — файлы не хранятся на сервере
+</footer>
+
+<script>
+let selectedFiles = [];
+let monthlyChartInst = null;
+let pieChartInst = null;
+
+const fileInput  = document.getElementById('fileInput');
+const dropZone   = document.getElementById('dropZone');
+const fileList   = document.getElementById('fileList');
+const analyzeBtn = document.getElementById('analyzeBtn');
+const errorBox   = document.getElementById('errorBox');
+
+fileInput.addEventListener('change', e => { addFiles([...e.target.files]); });
+
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  addFiles([...e.dataTransfer.files].filter(f => f.name.match(/\.xlsx?$/i)));
+});
+
+function addFiles(files) {
+  files.forEach(f => {
+    if (!selectedFiles.find(x => x.name === f.name)) selectedFiles.push(f);
+  });
+  renderFileList();
+}
+
+function renderFileList() {
+  fileList.innerHTML = '';
+  selectedFiles.forEach((f, i) => {
+    const el = document.createElement('div');
+    el.className = 'file-item';
+    el.innerHTML = `<span class="file-icon">📄</span>
+      <span class="file-name">${f.name}</span>
+      <span class="file-remove" onclick="removeFile(${i})">✕</span>`;
+    fileList.appendChild(el);
+  });
+  analyzeBtn.disabled = selectedFiles.length === 0;
+  if (selectedFiles.length) dropZone.classList.add('has-files');
+  else dropZone.classList.remove('has-files');
+}
+
+function removeFile(i) {
+  selectedFiles.splice(i, 1); renderFileList();
+}
+
+function fmt(n) {
+  return new Intl.NumberFormat('ru-RU').format(Math.round(n));
+}
+
+async function analyze() {
+  errorBox.style.display = 'none';
+  if (!selectedFiles.length) return;
+
+  document.getElementById('uploadSection').style.display = 'none';
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('results').style.display  = 'none';
+
+  const fd = new FormData();
+  selectedFiles.forEach(f => fd.append('files', f));
+
+  try {
+    const res = await fetch('/analyze', { method: 'POST', body: fd });
+    const data = await res.json();
+
+    document.getElementById('loading').style.display = 'none';
+
+    if (!res.ok) {
+      document.getElementById('uploadSection').style.display = 'block';
+      errorBox.textContent = data.error || 'Ошибка анализа';
+      errorBox.style.display = 'block';
+      return;
+    }
+
+    renderResults(data);
+    document.getElementById('results').style.display = 'block';
+
+  } catch(e) {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('uploadSection').style.display = 'block';
+    errorBox.textContent = 'Ошибка соединения с сервером';
+    errorBox.style.display = 'block';
+  }
+}
+
+function renderResults(d) {
+  // Meta
+  document.getElementById('resultsMeta').textContent =
+    `${d.total} транзакций · ${d.banks.length} банк(а)`;
+
+  // File badges
+  const fb = document.getElementById('filesBadges');
+  fb.innerHTML = d.files.map(f =>
+    `<div class="file-badge">📄 <span>${f.name}</span>
+     <span class="badge-bank">${f.bank}</span>
+     <span class="badge-count">${f.count} опер.</span></div>`
+  ).join('');
+
+  // KPIs
+  document.getElementById('kpiIncome').textContent  = fmt(d.total_income) + ' ₸';
+  document.getElementById('kpiExpense').textContent = fmt(d.total_expense) + ' ₸';
+  const net = d.net_cashflow;
+  const kpiNet = document.getElementById('kpiNet');
+  kpiNet.textContent = (net >= 0 ? '+' : '') + fmt(net) + ' ₸';
+  kpiNet.className   = 'kpi-value ' + (net >= 0 ? 'positive' : 'negative');
+  document.getElementById('kpiNetSub').textContent =
+    `Норма сбережений: ${d.total_income > 0 ? Math.round(net/d.total_income*100) : 0}%`;
+  document.getElementById('kpiTxns').textContent = d.total;
+  document.getElementById('kpiBanks').textContent = d.banks.map(b => b.bank).join(', ');
+
+  // Monthly chart
+  if (monthlyChartInst) monthlyChartInst.destroy();
+  const mCtx = document.getElementById('monthlyChart').getContext('2d');
+  monthlyChartInst = new Chart(mCtx, {
+    type: 'bar',
+    data: {
+      labels: d.monthly.map(m => m.month),
+      datasets: [
+        { label: 'Доходы', data: d.monthly.map(m => Math.round(m.income)),
+          backgroundColor: 'rgba(39,174,96,0.75)', borderRadius: 4 },
+        { label: 'Расходы', data: d.monthly.map(m => Math.round(m.expense)),
+          backgroundColor: 'rgba(231,76,60,0.75)', borderRadius: 4 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { font: { size: 11 }, boxWidth: 12 } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+        y: { grid: { color: '#F3F4F6' }, ticks: { font: { size: 10 },
+             callback: v => v >= 1000000 ? (v/1000000).toFixed(1)+'M' : v >= 1000 ? (v/1000)+'K' : v } }
+      }
+    }
+  });
+
+  // Pie chart
+  if (pieChartInst) pieChartInst.destroy();
+  const pCtx = document.getElementById('pieChart').getContext('2d');
+  const colors = ['#E74C3C','#E67E22','#F39C12','#27AE60','#2980B9','#8E44AD','#1ABC9C','#D35400'];
+  pieChartInst = new Chart(pCtx, {
+    type: 'doughnut',
+    data: {
+      labels: d.top_expenses.map(e => e.category),
+      datasets: [{ data: d.top_expenses.map(e => Math.round(e.amount)),
+        backgroundColor: colors, borderWidth: 0, hoverOffset: 6 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '60%',
+      plugins: { legend: { position: 'right', labels: { font: { size: 10 }, boxWidth: 10, padding: 8 } } }
+    }
+  });
+
+  // Banks
+  const bc = document.getElementById('bankCards');
+  bc.innerHTML = d.banks.map(b => {
+    const net = b.income - b.expense;
+    return `<div class="bank-card">
+      <div class="bank-name">🏦 ${b.bank}</div>
+      <div class="bank-row"><span>Доходы</span><span class="pos">${fmt(b.income)} ₸</span></div>
+      <div class="bank-row"><span>Расходы</span><span class="neg">${fmt(b.expense)} ₸</span></div>
+      <div class="bank-row"><span>Чистый CF</span>
+        <span class="${net >= 0 ? 'pos' : 'neg'}">${net >= 0 ? '+':'' }${fmt(net)} ₸</span></div>
+      <div class="bank-row"><span>Операций</span><span>${b.count}</span></div>
+    </div>`;
+  }).join('');
+
+  // Expense bars
+  const maxExp = d.top_expenses[0]?.amount || 1;
+  document.getElementById('expBars').innerHTML = d.top_expenses.map(e => {
+    const pct = Math.round(e.amount / maxExp * 100);
+    return `<div class="bar-item">
+      <div class="bar-row">
+        <span class="bar-label">${e.category}</span>
+        <span class="bar-amount">${fmt(e.amount)} ₸</span>
+      </div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+
+  // Monthly table
+  document.getElementById('monthlyBody').innerHTML = d.monthly.map(m => {
+    const net = m.income - m.expense;
+    const pct = m.income > 0 ? Math.round(net/m.income*100) : 0;
+    return `<tr>
+      <td><strong>${m.month}</strong></td>
+      <td class="pos">${fmt(m.income)}</td>
+      <td class="neg">${fmt(m.expense)}</td>
+      <td class="${net >= 0 ? 'pos' : 'neg'}">${net >= 0 ? '+':''}${fmt(net)}</td>
+      <td><span style="color:${net>=0?'#27AE60':'#E74C3C'}">${pct}%</span></td>
+    </tr>`;
+  }).join('');
+
+  // Recommendations
+  const icons = { check: '✅', alert: '🔴', info: 'ℹ️', trend: '📈' };
+  document.getElementById('recList').innerHTML = d.recommendations.map(r =>
+    `<div class="rec-item ${r.type}">
+      <span class="rec-icon">${icons[r.icon] || 'ℹ️'}</span>
+      <div>
+        <div class="rec-title">${r.title}</div>
+        <div class="rec-text">${r.text}</div>
+      </div>
+    </div>`
+  ).join('');
+}
+
+function downloadExcel() {
+  window.location.href = '/download-excel';
+}
+
+function resetForm() {
+  selectedFiles = [];
+  document.getElementById('fileList').innerHTML = '';
+  document.getElementById('uploadSection').style.display = 'block';
+  document.getElementById('results').style.display = 'none';
+  analyzeBtn.disabled = true;
+  dropZone.classList.remove('has-files');
+}
+</script>
+</body>
+</html>
