@@ -739,5 +739,41 @@ def generate_excel(transactions):
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)
     return buf
 
+
+# ─── СКЛАД ────────────────────────────────────────────────────────────────────
+
+from stock import parse_stock_report, build_stock_analytics
+
+@app.route("/stock-analyze", methods=["POST"])
+def stock_analyze():
+    files = request.files.getlist("files")
+    if not files:
+        return jsonify({"error": "Файл не загружен"}), 400
+
+    upload_dir = "/tmp/busan_uploads"
+    os.makedirs(upload_dir, exist_ok=True)
+
+    all_items = []
+    file_results = []
+    for f in files:
+        path = os.path.join(upload_dir, f.filename)
+        f.save(path)
+        items = parse_stock_report(path)
+        all_items.extend(items)
+        file_results.append({"name": f.filename, "count": len(items)})
+        os.remove(path)
+
+    if not all_items:
+        return jsonify({"error": "Товары не найдены. Проверьте формат файла."}), 400
+
+    analytics = build_stock_analytics(all_items)
+    analytics["files"] = file_results
+
+    with open("/tmp/busan_stock.json", "w", encoding="utf-8") as f:
+        json.dump(all_items, f, ensure_ascii=False, default=str)
+
+    return jsonify(analytics)
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
