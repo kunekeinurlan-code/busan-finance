@@ -4,7 +4,170 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BUSAN FINANCE — Cashflow</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
+// ─── NAVIGATION ──────────────────────────────────────────────────────────────
+function switchPage(page) {
+  // Hide all pages
+  document.querySelectorAll('[id^="page-"]').forEach(el => el.style.display='none');
+  // Hide cashflow sections
+  ['dbBanner','uploadSection','loading','results'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.style.display='none';
+  });
+
+  // Update nav
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('nav-'+page)?.classList.add('active');
+
+  if(page === 'cashflow') {
+    // Show cashflow
+    loadDbStats();
+    const db = document.getElementById('dbBanner');
+    const ul = document.getElementById('uploadSection');
+    if(db) db.style.display = db.dataset.hasData === 'true' ? 'flex' : 'none';
+    if(ul) ul.style.display = 'block';
+  } else if(page === 'stock') {
+    document.getElementById('page-stock').style.display = 'block';
+  }
+}
+
+// ─── STOCK ────────────────────────────────────────────────────────────────────
+let stockFile = null;
+
+document.getElementById('stockFileInput').addEventListener('change', e => {
+  stockFile = e.target.files[0];
+  if(stockFile) {
+    document.getElementById('stockFileList').innerHTML =
+      `<div class="file-item" style="margin-top:8px">📄 <span class="fn">${stockFile.name}</span>
+       <span class="rm" onclick="clearStockFile()">✕</span></div>`;
+    document.getElementById('stockAnalyzeBtn').disabled = false;
+    document.getElementById('stockDropZone').classList.add('has-files');
+  }
+});
+
+const sdz = document.getElementById('stockDropZone');
+sdz.addEventListener('dragover', e => { e.preventDefault(); sdz.classList.add('has-files'); });
+sdz.addEventListener('dragleave', () => { if(!stockFile) sdz.classList.remove('has-files'); });
+sdz.addEventListener('drop', e => {
+  e.preventDefault();
+  const f = [...e.dataTransfer.files].find(f => f.name.match(/\.xlsx?$/i));
+  if(f) { document.getElementById('stockFileInput').files; stockFile = f;
+    document.getElementById('stockFileList').innerHTML =
+      `<div class="file-item" style="margin-top:8px">📄 <span class="fn">${f.name}</span>
+       <span class="rm" onclick="clearStockFile()">✕</span></div>`;
+    document.getElementById('stockAnalyzeBtn').disabled = false;
+    sdz.classList.add('has-files');
+  }
+});
+
+function clearStockFile() {
+  stockFile = null;
+  document.getElementById('stockFileList').innerHTML = '';
+  document.getElementById('stockAnalyzeBtn').disabled = true;
+  sdz.classList.remove('has-files');
+}
+
+async function analyzeStock() {
+  document.getElementById('stockErrBox').style.display = 'none';
+  document.getElementById('stockUploadSection').style.display = 'none';
+  document.getElementById('stockLoading').style.display = 'block';
+  document.getElementById('stockResults').style.display = 'none';
+
+  const fd = new FormData();
+  fd.append('files', stockFile);
+
+  try {
+    const r = await fetch('/stock-analyze', { method: 'POST', body: fd });
+    const d = await r.json();
+    document.getElementById('stockLoading').style.display = 'none';
+    if(!r.ok) {
+      document.getElementById('stockUploadSection').style.display = 'block';
+      document.getElementById('stockErrBox').textContent = d.error;
+      document.getElementById('stockErrBox').style.display = 'block';
+      return;
+    }
+    renderStock(d);
+    document.getElementById('stockResults').style.display = 'block';
+  } catch(e) {
+    document.getElementById('stockLoading').style.display = 'none';
+    document.getElementById('stockUploadSection').style.display = 'block';
+    document.getElementById('stockErrBox').textContent = 'Ошибка соединения';
+    document.getElementById('stockErrBox').style.display = 'block';
+  }
+}
+
+function resetStock() {
+  clearStockFile();
+  document.getElementById('stockUploadSection').style.display = 'block';
+  document.getElementById('stockResults').style.display = 'none';
+}
+
+const AGE_COLORS = {
+  'До 30 дней':       '#27AE60',
+  '30–90 дней':       '#2ECC71',
+  '90–180 дней':      '#F39C12',
+  '180–365 дней':     '#E67E22',
+  'Более года (365+)':'#E74C3C',
+};
+
+function renderStock(d) {
+  document.getElementById('stockMeta').textContent =
+    `${d.total_items} позиций · ${Math.round(d.total_qty)} единиц · ${(d.files||[]).map(f=>f.name).join(', ')}`;
+
+  document.getElementById('sKpiItems').textContent  = d.total_items.toLocaleString('ru-RU');
+  document.getElementById('sKpiQty').textContent    = Math.round(d.total_qty).toLocaleString('ru-RU');
+  document.getElementById('sKpiCost').textContent   = fmt(d.total_cost) + ' ₸';
+  document.getElementById('sKpiRev').textContent    = fmt(d.total_revenue) + ' ₸';
+  document.getElementById('sKpiMargin').textContent = `наценка +${d.avg_margin}%`;
+  const fn = document.getElementById('sKpiFrozen');
+  fn.textContent = fmt(d.frozen_capital) + ' ₸';
+  fn.className = 'kpi-val ' + (d.frozen_share > 30 ? 'r' : 'g');
+  document.getElementById('sKpiFrozenShare').textContent = `${d.frozen_share}% от склада (>180 дн)`;
+
+  // Age table
+  const ageColors = {'До 30 дней':'#27AE60','30–90 дней':'#2ECC71','90–180 дней':'#F39C12','180–365 дней':'#E67E22','Более года (365+)':'#E74C3C'};
+  document.getElementById('ageBody').innerHTML = (d.age_table||[]).map(r => `
+    <tr>
+      <td><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${ageColors[r.age_group]||'#999'};margin-right:6px"></span><strong>${r.age_group}</strong></td>
+      <td>${r.count}</td>
+      <td>${r.count_share}%</td>
+      <td>${Math.round(r.qty).toLocaleString('ru-RU')}</td>
+      <td class="${r.age_group.includes('180')||r.age_group.includes('год')?'r':''}">${fmt(r.cost)}</td>
+      <td>${r.cost_share}%</td>
+      <td>${fmt(r.revenue)}</td>
+    </tr>`).join('');
+
+  // Categories
+  const maxCost = d.categories?.[0]?.cost || 1;
+  document.getElementById('stockCats').innerHTML = (d.categories||[]).slice(0,12).map(cat => `
+    <div class="cat-row">
+      <span class="cat-name" style="font-size:11px">${cat.category}</span>
+      <div class="cat-bar-wrap"><div class="cat-bar-track"><div class="cat-bar-fill exp" style="width:${Math.round(cat.cost/maxCost*100)}%"></div></div></div>
+      <span class="cat-amt r" style="font-size:11px">${fmt(cat.cost)} ₸</span>
+      <span class="cat-share" style="font-size:10px">${cat.avg_days}д</span>
+    </div>`).join('');
+
+  // Dead items
+  document.getElementById('deadItems').innerHTML = (d.dead_items||[]).map(item => {
+    const color = item.days > 365 ? '#E74C3C' : '#E67E22';
+    return `<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:11px">
+      <div style="font-weight:600;color:var(--navy);margin-bottom:2px">${item.name.substring(0,50)}</div>
+      <div style="display:flex;justify-content:space-between;color:var(--muted)">
+        <span>${item.category}</span>
+        <span style="color:${color};font-weight:700">${Math.round(item.days)} дн · ${fmt(item.cost_total)} ₸</span>
+      </div>
+    </div>`;
+  }).join('') || '<div style="font-size:12px;color:var(--muted);padding:12px 0">Нет залежалых товаров</div>';
+
+  // Recommendations
+  const icons = {check:'✅', alert:'🔴', info:'ℹ️', trend:'📈'};
+  document.getElementById('stockRecs').innerHTML = (d.recommendations||[]).map(r =>
+    `<div class="rec ${r.type}"><span style="font-size:14px">${icons[r.icon]||'ℹ️'}</span>
+    <div><div class="rec-t">${r.title}</div><div class="rec-d">${r.text}</div></div></div>`
+  ).join('');
+}
+
+</script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--navy:#1A1A2E;--navy2:#16213E;--gold:#D4A017;--gold-l:#F0C040;--cream:#F8F6F0;--white:#fff;--green:#27AE60;--red:#E74C3C;--text:#1A1A2E;--muted:#6B7280;--border:#E5E7EB;--surf:#F9F8F5}
@@ -19,6 +182,19 @@ header{background:var(--navy);padding:0 32px;height:56px;display:flex;align-item
 .btn-logout{background:transparent;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer;display:none}
 .btn-logout:hover{color:#fff;border-color:rgba(255,255,255,.5)}
 main{max-width:1120px;margin:0 auto;padding:28px 20px 80px}
+
+
+/* SIDEBAR NAVIGATION */
+.app-layout{display:flex;min-height:calc(100vh - 56px)}
+.sidebar{width:200px;background:var(--navy);flex-shrink:0;padding:20px 0;border-right:1px solid rgba(255,255,255,.08)}
+.sidebar-section{padding:0 12px;margin-bottom:20px}
+.sidebar-label{font-size:9px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:1.5px;padding:0 8px;margin-bottom:6px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;color:rgba(255,255,255,.55);transition:all .15s;margin-bottom:2px;border:none;background:none;width:100%;text-align:left}
+.nav-item:hover{background:rgba(255,255,255,.07);color:rgba(255,255,255,.9)}
+.nav-item.active{background:rgba(212,160,23,.15);color:var(--gold)}
+.nav-item .nav-icon{font-size:14px;width:18px;text-align:center;flex-shrink:0}
+.page-content{flex:1;padding:28px 24px 80px;overflow-x:hidden;max-width:920px}
+@media(max-width:768px){.sidebar{display:none}.page-content{padding:16px 14px 60px}}
 
 /* LOGIN */
 #loginSection{display:flex;align-items:center;justify-content:center;min-height:70vh}
@@ -208,6 +384,23 @@ footer{text-align:center;padding:18px;font-size:11px;color:var(--muted);border-t
 
 <!-- APP -->
 <div id="appSection" style="display:none">
+<div class="app-layout">
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Разделы</div>
+      <button class="nav-item active" id="nav-cashflow" onclick="switchPage('cashflow')">
+        <span class="nav-icon">💰</span> Cashflow
+      </button>
+      <button class="nav-item" id="nav-stock" onclick="switchPage('stock')">
+        <span class="nav-icon">📦</span> Товары
+      </button>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <div class="page-content">
 
   <!-- DB BANNER -->
   <div class="db-banner" id="dbBanner">
@@ -604,6 +797,169 @@ function resetForm(){
   document.getElementById('addedBadge').style.display='none';
   dz.classList.remove('has-files');
 }
+
+// ─── NAVIGATION ──────────────────────────────────────────────────────────────
+function switchPage(page) {
+  // Hide all pages
+  document.querySelectorAll('[id^="page-"]').forEach(el => el.style.display='none');
+  // Hide cashflow sections
+  ['dbBanner','uploadSection','loading','results'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.style.display='none';
+  });
+
+  // Update nav
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('nav-'+page)?.classList.add('active');
+
+  if(page === 'cashflow') {
+    // Show cashflow
+    loadDbStats();
+    const db = document.getElementById('dbBanner');
+    const ul = document.getElementById('uploadSection');
+    if(db) db.style.display = db.dataset.hasData === 'true' ? 'flex' : 'none';
+    if(ul) ul.style.display = 'block';
+  } else if(page === 'stock') {
+    document.getElementById('page-stock').style.display = 'block';
+  }
+}
+
+// ─── STOCK ────────────────────────────────────────────────────────────────────
+let stockFile = null;
+
+document.getElementById('stockFileInput').addEventListener('change', e => {
+  stockFile = e.target.files[0];
+  if(stockFile) {
+    document.getElementById('stockFileList').innerHTML =
+      `<div class="file-item" style="margin-top:8px">📄 <span class="fn">${stockFile.name}</span>
+       <span class="rm" onclick="clearStockFile()">✕</span></div>`;
+    document.getElementById('stockAnalyzeBtn').disabled = false;
+    document.getElementById('stockDropZone').classList.add('has-files');
+  }
+});
+
+const sdz = document.getElementById('stockDropZone');
+sdz.addEventListener('dragover', e => { e.preventDefault(); sdz.classList.add('has-files'); });
+sdz.addEventListener('dragleave', () => { if(!stockFile) sdz.classList.remove('has-files'); });
+sdz.addEventListener('drop', e => {
+  e.preventDefault();
+  const f = [...e.dataTransfer.files].find(f => f.name.match(/\.xlsx?$/i));
+  if(f) { document.getElementById('stockFileInput').files; stockFile = f;
+    document.getElementById('stockFileList').innerHTML =
+      `<div class="file-item" style="margin-top:8px">📄 <span class="fn">${f.name}</span>
+       <span class="rm" onclick="clearStockFile()">✕</span></div>`;
+    document.getElementById('stockAnalyzeBtn').disabled = false;
+    sdz.classList.add('has-files');
+  }
+});
+
+function clearStockFile() {
+  stockFile = null;
+  document.getElementById('stockFileList').innerHTML = '';
+  document.getElementById('stockAnalyzeBtn').disabled = true;
+  sdz.classList.remove('has-files');
+}
+
+async function analyzeStock() {
+  document.getElementById('stockErrBox').style.display = 'none';
+  document.getElementById('stockUploadSection').style.display = 'none';
+  document.getElementById('stockLoading').style.display = 'block';
+  document.getElementById('stockResults').style.display = 'none';
+
+  const fd = new FormData();
+  fd.append('files', stockFile);
+
+  try {
+    const r = await fetch('/stock-analyze', { method: 'POST', body: fd });
+    const d = await r.json();
+    document.getElementById('stockLoading').style.display = 'none';
+    if(!r.ok) {
+      document.getElementById('stockUploadSection').style.display = 'block';
+      document.getElementById('stockErrBox').textContent = d.error;
+      document.getElementById('stockErrBox').style.display = 'block';
+      return;
+    }
+    renderStock(d);
+    document.getElementById('stockResults').style.display = 'block';
+  } catch(e) {
+    document.getElementById('stockLoading').style.display = 'none';
+    document.getElementById('stockUploadSection').style.display = 'block';
+    document.getElementById('stockErrBox').textContent = 'Ошибка соединения';
+    document.getElementById('stockErrBox').style.display = 'block';
+  }
+}
+
+function resetStock() {
+  clearStockFile();
+  document.getElementById('stockUploadSection').style.display = 'block';
+  document.getElementById('stockResults').style.display = 'none';
+}
+
+const AGE_COLORS = {
+  'До 30 дней':       '#27AE60',
+  '30–90 дней':       '#2ECC71',
+  '90–180 дней':      '#F39C12',
+  '180–365 дней':     '#E67E22',
+  'Более года (365+)':'#E74C3C',
+};
+
+function renderStock(d) {
+  document.getElementById('stockMeta').textContent =
+    `${d.total_items} позиций · ${Math.round(d.total_qty)} единиц · ${(d.files||[]).map(f=>f.name).join(', ')}`;
+
+  document.getElementById('sKpiItems').textContent  = d.total_items.toLocaleString('ru-RU');
+  document.getElementById('sKpiQty').textContent    = Math.round(d.total_qty).toLocaleString('ru-RU');
+  document.getElementById('sKpiCost').textContent   = fmt(d.total_cost) + ' ₸';
+  document.getElementById('sKpiRev').textContent    = fmt(d.total_revenue) + ' ₸';
+  document.getElementById('sKpiMargin').textContent = `наценка +${d.avg_margin}%`;
+  const fn = document.getElementById('sKpiFrozen');
+  fn.textContent = fmt(d.frozen_capital) + ' ₸';
+  fn.className = 'kpi-val ' + (d.frozen_share > 30 ? 'r' : 'g');
+  document.getElementById('sKpiFrozenShare').textContent = `${d.frozen_share}% от склада (>180 дн)`;
+
+  // Age table
+  const ageColors = {'До 30 дней':'#27AE60','30–90 дней':'#2ECC71','90–180 дней':'#F39C12','180–365 дней':'#E67E22','Более года (365+)':'#E74C3C'};
+  document.getElementById('ageBody').innerHTML = (d.age_table||[]).map(r => `
+    <tr>
+      <td><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${ageColors[r.age_group]||'#999'};margin-right:6px"></span><strong>${r.age_group}</strong></td>
+      <td>${r.count}</td>
+      <td>${r.count_share}%</td>
+      <td>${Math.round(r.qty).toLocaleString('ru-RU')}</td>
+      <td class="${r.age_group.includes('180')||r.age_group.includes('год')?'r':''}">${fmt(r.cost)}</td>
+      <td>${r.cost_share}%</td>
+      <td>${fmt(r.revenue)}</td>
+    </tr>`).join('');
+
+  // Categories
+  const maxCost = d.categories?.[0]?.cost || 1;
+  document.getElementById('stockCats').innerHTML = (d.categories||[]).slice(0,12).map(cat => `
+    <div class="cat-row">
+      <span class="cat-name" style="font-size:11px">${cat.category}</span>
+      <div class="cat-bar-wrap"><div class="cat-bar-track"><div class="cat-bar-fill exp" style="width:${Math.round(cat.cost/maxCost*100)}%"></div></div></div>
+      <span class="cat-amt r" style="font-size:11px">${fmt(cat.cost)} ₸</span>
+      <span class="cat-share" style="font-size:10px">${cat.avg_days}д</span>
+    </div>`).join('');
+
+  // Dead items
+  document.getElementById('deadItems').innerHTML = (d.dead_items||[]).map(item => {
+    const color = item.days > 365 ? '#E74C3C' : '#E67E22';
+    return `<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:11px">
+      <div style="font-weight:600;color:var(--navy);margin-bottom:2px">${item.name.substring(0,50)}</div>
+      <div style="display:flex;justify-content:space-between;color:var(--muted)">
+        <span>${item.category}</span>
+        <span style="color:${color};font-weight:700">${Math.round(item.days)} дн · ${fmt(item.cost_total)} ₸</span>
+      </div>
+    </div>`;
+  }).join('') || '<div style="font-size:12px;color:var(--muted);padding:12px 0">Нет залежалых товаров</div>';
+
+  // Recommendations
+  const icons = {check:'✅', alert:'🔴', info:'ℹ️', trend:'📈'};
+  document.getElementById('stockRecs').innerHTML = (d.recommendations||[]).map(r =>
+    `<div class="rec ${r.type}"><span style="font-size:14px">${icons[r.icon]||'ℹ️'}</span>
+    <div><div class="rec-t">${r.title}</div><div class="rec-d">${r.text}</div></div></div>`
+  ).join('');
+}
+
 </script>
 </body>
 </html>
