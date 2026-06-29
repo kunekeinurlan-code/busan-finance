@@ -379,7 +379,12 @@ footer{text-align:center;padding:18px;font-size:11px;color:var(--muted);border-t
 </main>
 <footer>BUSAN FINANCE · KUNEKEI GROUP · Данные защищены · Файлы не хранятся на сервере</footer>
 <script>
+// ─── GLOBALS ─────────────────────────────────────────────────────────────────
 let files=[], mode='append', mChart=null, pChart=null;
+let stockFile = null;
+
+// ─── ALL CODE ────────────────────────────────────────────────────────────────
+
 
 async function doLogin(){
   const r=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:document.getElementById('pwdInput').value})});
@@ -418,11 +423,48 @@ async function clearDb(){
   document.getElementById('dbBanner').style.display='none';
 }
 
-document.getElementById('fileInput').addEventListener('change',e=>addFiles([...e.target.files]));
-const dz=document.getElementById('dropZone');
-dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('has-files')});
-dz.addEventListener('dragleave',()=>dz.classList.remove('has-files'));
-dz.addEventListener('drop',e=>{e.preventDefault();addFiles([...e.dataTransfer.files].filter(f=>f.name.match(/\.xlsx?$/i)))});
+window.addEventListener('load', function() {
+  const fi = document.getElementById('fileInput');
+  if(fi) fi.addEventListener('change', e => addFiles([...e.target.files]));
+  
+  const dz = document.getElementById('dropZone');
+  if(dz) {
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('has-files'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('has-files'));
+    dz.addEventListener('drop', e => { e.preventDefault(); addFiles([...e.dataTransfer.files].filter(f => f.name.match(/\.xlsx?$/i))); });
+  }
+
+  const sfi = document.getElementById('stockFileInput');
+  if(sfi) sfi.addEventListener('change', e => {
+    stockFile = e.target.files[0];
+    if(stockFile) {
+      const fl = document.getElementById('stockFileList');
+      if(fl) fl.innerHTML = '<div class="file-item" style="margin-top:8px">📄 <span class="fn">'+stockFile.name+'</span><span class="rm" onclick="clearStockFile()">✕</span></div>';
+      const btn = document.getElementById('stockAnalyzeBtn');
+      if(btn) btn.disabled = false;
+      const sdz2 = document.getElementById('stockDropZone');
+      if(sdz2) sdz2.classList.add('has-files');
+    }
+  });
+  const sdz = document.getElementById('stockDropZone');
+  if(sdz) {
+    sdz.addEventListener('dragover', e => { e.preventDefault(); sdz.classList.add('has-files'); });
+    sdz.addEventListener('dragleave', () => { if(!stockFile) sdz.classList.remove('has-files'); });
+    sdz.addEventListener('drop', e => {
+      e.preventDefault();
+      const f = [...e.dataTransfer.files].find(f => f.name.match(/\.xlsx?$/i));
+      if(f) {
+        stockFile = f;
+        const fl = document.getElementById('stockFileList');
+        if(fl) fl.innerHTML = '<div class="file-item" style="margin-top:8px">📄 <span class="fn">'+f.name+'</span><span class="rm" onclick="clearStockFile()">✕</span></div>';
+        const btn = document.getElementById('stockAnalyzeBtn');
+        if(btn) btn.disabled = false;
+        sdz.classList.add('has-files');
+      }
+    });
+  }
+});
+
 function addFiles(f){f.forEach(x=>{if(!files.find(y=>y.name===x.name))files.push(x)});renderFiles();}
 function removeFile(i){files.splice(i,1);renderFiles();}
 function renderFiles(){
@@ -646,47 +688,27 @@ function switchPage(page) {
     const el = document.getElementById(id);
     if(el) el.style.display='none';
   });
-
   // Update nav
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-  document.getElementById('nav-'+page)?.classList.add('active');
+  const navEl = document.getElementById('nav-'+page);
+  if(navEl) navEl.classList.add('active');
 
   if(page === 'cashflow') {
-    document.getElementById('uploadSection').style.display = 'block';
+    const ul = document.getElementById('uploadSection');
+    if(ul) ul.style.display = 'block';
     loadDbStats();
   } else if(page === 'stock') {
-    document.getElementById('page-stock').style.display = 'block';
+    const sp = document.getElementById('page-stock');
+    if(sp) sp.style.display = 'block';
   }
 }
 
 // ─── STOCK ────────────────────────────────────────────────────────────────────
-let stockFile = null;
 
-document.getElementById('stockFileInput').addEventListener('change', e => {
-  stockFile = e.target.files[0];
-  if(stockFile) {
-    document.getElementById('stockFileList').innerHTML =
-      `<div class="file-item" style="margin-top:8px">📄 <span class="fn">${stockFile.name}</span>
-       <span class="rm" onclick="clearStockFile()">✕</span></div>`;
-    document.getElementById('stockAnalyzeBtn').disabled = false;
-    document.getElementById('stockDropZone').classList.add('has-files');
-  }
-});
 
-const sdz = document.getElementById('stockDropZone');
-sdz.addEventListener('dragover', e => { e.preventDefault(); sdz.classList.add('has-files'); });
-sdz.addEventListener('dragleave', () => { if(!stockFile) sdz.classList.remove('has-files'); });
-sdz.addEventListener('drop', e => {
-  e.preventDefault();
-  const f = [...e.dataTransfer.files].find(f => f.name.match(/\.xlsx?$/i));
-  if(f) { document.getElementById('stockFileInput').files; stockFile = f;
-    document.getElementById('stockFileList').innerHTML =
-      `<div class="file-item" style="margin-top:8px">📄 <span class="fn">${f.name}</span>
-       <span class="rm" onclick="clearStockFile()">✕</span></div>`;
-    document.getElementById('stockAnalyzeBtn').disabled = false;
-    sdz.classList.add('has-files');
-  }
-});
+
+
+
 
 function clearStockFile() {
   stockFile = null;
@@ -794,6 +816,7 @@ function renderStock(d) {
     <div><div class="rec-t">${r.title}</div><div class="rec-d">${r.text}</div></div></div>`
   ).join('');
 }
+
 
 </script>
 </body>
