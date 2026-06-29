@@ -20,12 +20,8 @@ function switchPage(page) {
   document.getElementById('nav-'+page)?.classList.add('active');
 
   if(page === 'cashflow') {
-    // Show cashflow
+    document.getElementById('uploadSection').style.display = 'block';
     loadDbStats();
-    const db = document.getElementById('dbBanner');
-    const ul = document.getElementById('uploadSection');
-    if(db) db.style.display = db.dataset.hasData === 'true' ? 'flex' : 'none';
-    if(ul) ul.style.display = 'block';
   } else if(page === 'stock') {
     document.getElementById('page-stock').style.display = 'block';
   }
@@ -181,12 +177,12 @@ header{background:var(--navy);padding:0 32px;height:56px;display:flex;align-item
 .badge{font-size:10px;color:var(--gold);border:1px solid rgba(212,160,23,.4);padding:3px 10px;border-radius:12px}
 .btn-logout{background:transparent;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer;display:none}
 .btn-logout:hover{color:#fff;border-color:rgba(255,255,255,.5)}
-main{max-width:1120px;margin:0 auto;padding:28px 20px 80px}
+main{padding:0;margin:0;width:100%}
 
 
 /* SIDEBAR NAVIGATION */
-.app-layout{display:flex;min-height:calc(100vh - 56px)}
-.sidebar{width:200px;background:var(--navy);flex-shrink:0;padding:20px 0;border-right:1px solid rgba(255,255,255,.08)}
+.app-layout{display:flex;min-height:calc(100vh - 56px);width:100%}
+.sidebar{width:200px;background:var(--navy);flex-shrink:0;padding:20px 0;border-right:1px solid rgba(255,255,255,.08);min-height:calc(100vh - 56px)}
 .sidebar-section{padding:0 12px;margin-bottom:20px}
 .sidebar-label{font-size:9px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:1.5px;padding:0 8px;margin-bottom:6px}
 .nav-item{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;color:rgba(255,255,255,.55);transition:all .15s;margin-bottom:2px;border:none;background:none;width:100%;text-align:left}
@@ -197,7 +193,7 @@ main{max-width:1120px;margin:0 auto;padding:28px 20px 80px}
 @media(max-width:768px){.sidebar{display:none}.page-content{padding:16px 14px 60px}}
 
 /* LOGIN */
-#loginSection{display:flex;align-items:center;justify-content:center;min-height:70vh}
+#loginSection{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
 .login-card{background:var(--white);border:1px solid var(--border);border-radius:16px;padding:48px 40px;text-align:center;width:100%;max-width:380px}
 .login-icon{font-size:36px;margin-bottom:14px}
 .login-title{font-size:20px;font-weight:700;color:var(--navy);margin-bottom:6px}
@@ -549,7 +545,7 @@ async function doLogin(){
     document.getElementById('loginSection').style.display='none';
     document.getElementById('appSection').style.display='block';
     document.getElementById('btnLogout').style.display='block';
-    loadDbStats();
+    switchPage('cashflow');
   } else { document.getElementById('loginErr').style.display='block'; }
 }
 async function logout(){ await fetch('/logout',{method:'POST'}); location.reload(); }
@@ -571,7 +567,7 @@ async function viewDb(){
   const r=await fetch('/db-analyze'); const d=await r.json();
   hide('loading');
   if(d.error){alert(d.error);show('uploadSection');return;}
-  renderResults(d); show('results');
+  renderResults(d); show('results'); hide('uploadSection');
 }
 async function clearDb(){
   if(!confirm('Очистить всю базу данных?'))return;
@@ -608,7 +604,7 @@ async function analyze(){
     const d=await r.json();
     hide('loading');
     if(!r.ok){show('uploadSection');document.getElementById('errBox').textContent=d.error;document.getElementById('errBox').style.display='block';return;}
-    renderResults(d); show('results'); loadDbStats();
+    renderResults(d); show('results'); hide('uploadSection'); loadDbStats();
   }catch(e){
     hide('loading'); show('uploadSection');
     document.getElementById('errBox').textContent='Ошибка соединения'; document.getElementById('errBox').style.display='block';
@@ -813,12 +809,8 @@ function switchPage(page) {
   document.getElementById('nav-'+page)?.classList.add('active');
 
   if(page === 'cashflow') {
-    // Show cashflow
+    document.getElementById('uploadSection').style.display = 'block';
     loadDbStats();
-    const db = document.getElementById('dbBanner');
-    const ul = document.getElementById('uploadSection');
-    if(db) db.style.display = db.dataset.hasData === 'true' ? 'flex' : 'none';
-    if(ul) ul.style.display = 'block';
   } else if(page === 'stock') {
     document.getElementById('page-stock').style.display = 'block';
   }
