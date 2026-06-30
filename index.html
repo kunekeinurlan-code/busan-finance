@@ -4,7 +4,120 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BUSAN FINANCE</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
+// ─── BEP ─────────────────────────────────────────────────────────────────────
+var bepData = null;
+var bepChartInst = null;
+
+async function loadBEP() {
+  document.getElementById('bepErr').style.display = 'none';
+  document.getElementById('bepEmpty').style.display = 'none';
+  document.getElementById('bepLoading').style.display = 'block';
+  document.getElementById('bepResults').style.display = 'none';
+
+  try {
+    var r = await fetch('/bep-data');
+    var d = await r.json();
+    document.getElementById('bepLoading').style.display = 'none';
+    if(!r.ok) {
+      document.getElementById('bepEmpty').style.display = 'block';
+      document.getElementById('bepErr').textContent = d.error;
+      document.getElementById('bepErr').style.display = 'block';
+      return;
+    }
+    bepData = d;
+    renderBEP(d, 0);
+    document.getElementById('bepResults').style.display = 'block';
+  } catch(e) {
+    document.getElementById('bepLoading').style.display = 'none';
+    document.getElementById('bepEmpty').style.display = 'block';
+    document.getElementById('bepErr').textContent = 'Ошибка соединения';
+    document.getElementById('bepErr').style.display = 'block';
+  }
+}
+
+function reloadBEP() {
+  document.getElementById('bepResults').style.display = 'none';
+  document.getElementById('bepEmpty').style.display = 'block';
+}
+
+function recalcBEP() {
+  if(!bepData) return;
+  var cogs = parseFloat(document.getElementById('cogsInput').value) || 0;
+  renderBEP(bepData, cogs);
+}
+
+function renderBEP(d, cogs) {
+  var fixedTotal    = d.avg_fixed + cogs;
+  var varTotal      = d.avg_variable;
+  var varRatio      = d.variable_ratio / 100;
+  var cmRatio       = 1 - varRatio;
+  var bep           = cmRatio > 0 ? Math.round(fixedTotal / cmRatio) : 0;
+  var safety        = Math.round(d.avg_revenue - bep);
+  var safetyPct     = d.avg_revenue > 0 ? Math.round(safety / d.avg_revenue * 100) : 0;
+
+  document.getElementById('bepMeta').textContent = 'Период: ' + d.period + ' · ' + d.n_months + ' мес.';
+  document.getElementById('bKpiRev').textContent    = fmt(d.avg_revenue) + ' ₸';
+  document.getElementById('bKpiFixed').textContent  = fmt(fixedTotal) + ' ₸';
+  document.getElementById('bKpiVar').textContent    = fmt(varTotal) + ' ₸';
+  document.getElementById('bKpiVarPct').textContent = d.variable_ratio + '% от выручки';
+  document.getElementById('bKpiBEP').textContent    = fmt(bep) + ' ₸';
+  var safeEl = document.getElementById('bKpiSafety');
+  safeEl.textContent  = (safety >= 0 ? '+' : '') + fmt(safety) + ' ₸';
+  safeEl.className    = 'kpi-val ' + (safety >= 0 ? 'g' : 'r');
+  document.getElementById('bKpiSafetyPct').textContent = 'запас: ' + safetyPct + '%';
+  document.getElementById('cmRatio').textContent = Math.round(cmRatio * 100) + '%';
+
+  // Fixed breakdown
+  document.getElementById('fixedBreakdown').innerHTML = Object.entries(d.fixed_breakdown).sort(function(a,b){return b[1]-a[1];}).map(function(e){
+    return '<div class="cat-row"><span class="cat-name" style="font-size:11px">'+e[0]+'</span><span class="cat-amt r" style="font-size:11px">'+fmt(e[1])+' ₸</span></div>';
+  }).join('') || '<div style="font-size:12px;color:var(--muted);padding:8px 0">Нет данных</div>';
+
+  // Variable breakdown
+  document.getElementById('varBreakdown').innerHTML = Object.entries(d.variable_breakdown).sort(function(a,b){return b[1]-a[1];}).map(function(e){
+    return '<div class="cat-row"><span class="cat-name" style="font-size:11px">'+e[0]+'</span><span class="cat-amt r" style="font-size:11px">'+fmt(e[1])+' ₸</span></div>';
+  }).join('') || '<div style="font-size:12px;color:var(--muted);padding:8px 0">Нет данных</div>';
+
+  // BEP Chart — waterfall style
+  if(bepChartInst) bepChartInst.destroy();
+  var labels = ['Выручка', 'Пост. затраты', 'Перем. затраты', 'Закуп/COGS', 'Прибыль'];
+  var profit = d.avg_revenue - fixedTotal - varTotal;
+  bepChartInst = new Chart(document.getElementById('bepChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: ['Ср. выручка/мес', 'Пост. затраты', 'Перем. затраты', 'ТБУ (нужно)', 'Запас прочности'],
+      datasets: [{
+        data: [d.avg_revenue, fixedTotal, varTotal, bep, Math.max(0, safety)],
+        backgroundColor: ['rgba(39,174,96,.75)', 'rgba(231,76,60,.75)', 'rgba(231,76,60,.6)', 'rgba(212,160,23,.8)', safety>=0?'rgba(39,174,96,.5)':'rgba(231,76,60,.5)'],
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+        y: { grid: { color: '#F3F4F6' }, ticks: { font: { size: 9 }, callback: function(v){ return v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?(v/1000).toFixed(0)+'K':v; } } }
+      }
+    }
+  });
+
+  // Monthly table
+  document.getElementById('bepMonthly').innerHTML = (d.monthly_table||[]).map(function(m){
+    var s = m.safety >= 0;
+    return '<tr>'+
+      '<td><strong>'+m.month+'</strong></td>'+
+      '<td class="g">'+fmt(m.revenue)+'</td>'+
+      '<td class="r">'+fmt(m.fixed)+'</td>'+
+      '<td class="r">'+fmt(m.variable)+'</td>'+
+      '<td style="font-weight:600">'+fmt(m.bep)+'</td>'+
+      '<td class="'+(s?'g':'r')+'">'+(s?'+':'')+fmt(m.safety)+'</td>'+
+      '<td><span style="background:'+(s?'#D1FAE5':'#FEE2E2')+';color:'+(s?'#15803D':'#DC2626')+';padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">'+(s?'✓ Достигнута':'✗ Не достигнута')+'</span></td>'+
+      '</tr>';
+  }).join('');
+}
+
+</script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--navy:#1A1A2E;--gold:#D4A017;--gold-l:#F0C040;--cream:#F8F6F0;--white:#fff;--green:#27AE60;--red:#E74C3C;--text:#1A1A2E;--muted:#6B7280;--border:#E5E7EB;--surf:#F9F8F5}
@@ -218,6 +331,9 @@ footer{text-align:center;padding:18px;font-size:11px;color:var(--muted);border-t
       <button class="nav-item" id="nav-stock" onclick="showPage('stock')">
         <span>📦</span> Товары
       </button>
+      <button class="nav-item" id="nav-bep" onclick="showPage('bep')">
+        <span>📐</span> Точка БУ
+      </button>
     </div>
   </nav>
 
@@ -387,6 +503,88 @@ footer{text-align:center;padding:18px;font-size:11px;color:var(--muted);border-t
       </div>
     </div><!-- /stock page -->
 
+
+    <!-- ══ BEP PAGE ══ -->
+    <div id="page-bep" class="page">
+
+      <!-- Empty state -->
+      <div id="bepEmpty" style="text-align:center;padding:60px 20px;max-width:500px;margin:0 auto">
+        <div style="font-size:48px;margin-bottom:16px">📐</div>
+        <div style="font-size:18px;font-weight:700;color:var(--navy);margin-bottom:8px">Точка безубыточности</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:24px;line-height:1.6">
+          Данные берутся автоматически из загруженных выписок.<br>
+          Сначала загрузите выписки в разделе <strong>Cashflow</strong>.
+        </div>
+        <button class="btn-analyze" onclick="loadBEP()" style="margin-top:0">⚡ Рассчитать</button>
+        <div class="err-box" id="bepErr" style="margin-top:12px;text-align:left"></div>
+      </div>
+
+      <!-- Loading -->
+      <div class="loading-wrap" id="bepLoading">
+        <div class="spinner"></div><p style="color:var(--muted);font-size:13px">Рассчитываем точку безубыточности...</p>
+      </div>
+
+      <!-- Results -->
+      <div id="bepResults" style="display:none">
+        <div class="res-hdr">
+          <div><div class="res-title">Точка безубыточности</div><div class="res-meta" id="bepMeta"></div></div>
+          <button class="btn-back" onclick="reloadBEP()">↺ Пересчитать</button>
+        </div>
+
+        <!-- KPI -->
+        <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+          <div class="kpi inc"><div class="kpi-lbl">Ср. выручка/мес</div><div class="kpi-val g" id="bKpiRev">—</div><div class="kpi-sub">из поступлений</div></div>
+          <div class="kpi exp"><div class="kpi-lbl">Постоянные/мес</div><div class="kpi-val r" id="bKpiFixed">—</div><div class="kpi-sub">аренда, зарплата, связь...</div></div>
+          <div class="kpi exp"><div class="kpi-lbl">Переменные/мес</div><div class="kpi-val r" id="bKpiVar">—</div><div class="kpi-sub" id="bKpiVarPct"></div></div>
+          <div class="kpi net"><div class="kpi-lbl">Точка БУ (выручка)</div><div class="kpi-val" id="bKpiBEP">—</div><div class="kpi-sub">нужно заработать в месяц</div></div>
+          <div class="kpi"><div class="kpi-lbl">Запас прочности</div><div class="kpi-val" id="bKpiSafety">—</div><div class="kpi-sub" id="bKpiSafetyPct"></div></div>
+        </div>
+
+        <!-- Визуализация ТБУ -->
+        <div class="sec">
+          <div class="sec-title"><span class="dot gold"></span>График точки безубыточности</div>
+          <div class="chart-wrap" style="height:240px"><canvas id="bepChart"></canvas></div>
+        </div>
+
+        <!-- Постоянные + Переменные -->
+        <div class="two">
+          <div class="sec">
+            <div class="sec-title"><span class="dot r"></span>Постоянные затраты (в месяц)</div>
+            <div id="fixedBreakdown"></div>
+            <div id="fixedCOGS" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+              <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:600">СЕБЕСТОИМОСТЬ / ЗАКУП (вручную)</div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input type="number" id="cogsInput" placeholder="0" style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:7px;font-size:13px;outline:none"
+                       oninput="recalcBEP()">
+                <span style="font-size:13px;color:var(--muted)">₸ / мес</span>
+              </div>
+              <div style="font-size:10px;color:var(--muted);margin-top:4px">Укажите среднемесячный закуп товара</div>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="sec-title"><span class="dot r"></span>Переменные затраты (в месяц)</div>
+            <div id="varBreakdown"></div>
+            <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:600">МАРЖИНАЛЬНЫЙ КОЭФФИЦИЕНТ</div>
+              <div style="font-size:24px;font-weight:800;color:var(--navy)" id="cmRatio">—</div>
+              <div style="font-size:10px;color:var(--muted)">(1 − переменные % от выручки)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Помесячная таблица -->
+        <div class="sec">
+          <div class="sec-title"><span class="dot gold"></span>Достижение ТБУ по месяцам</div>
+          <div style="overflow-x:auto">
+            <table class="m-table">
+              <thead><tr><th>Месяц</th><th>Выручка (₸)</th><th>Пост. затр. (₸)</th><th>Перем. затр. (₸)</th><th>ТБУ (₸)</th><th>Запас / Дефицит</th><th>Статус</th></tr></thead>
+              <tbody id="bepMonthly"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div><!-- /bep page -->
+
   </div><!-- /page-content -->
 </div><!-- /app-layout -->
 </div><!-- /appSection -->
@@ -455,6 +653,7 @@ function showPage(page) {
   document.querySelectorAll('.nav-item').forEach(function(el) { el.classList.remove('active'); });
   document.getElementById('page-' + page).classList.add('active');
   document.getElementById('nav-' + page).classList.add('active');
+  if(page === 'bep') loadBEP();
 }
 
 // ─── DB STATS ────────────────────────────────────────────────────────────────
@@ -775,6 +974,119 @@ function renderStock(d) {
       '<div><div class="rec-t">'+r.title+'</div><div class="rec-d">'+r.text+'</div></div></div>';
   }).join('');
 }
+
+// ─── BEP ─────────────────────────────────────────────────────────────────────
+var bepData = null;
+var bepChartInst = null;
+
+async function loadBEP() {
+  document.getElementById('bepErr').style.display = 'none';
+  document.getElementById('bepEmpty').style.display = 'none';
+  document.getElementById('bepLoading').style.display = 'block';
+  document.getElementById('bepResults').style.display = 'none';
+
+  try {
+    var r = await fetch('/bep-data');
+    var d = await r.json();
+    document.getElementById('bepLoading').style.display = 'none';
+    if(!r.ok) {
+      document.getElementById('bepEmpty').style.display = 'block';
+      document.getElementById('bepErr').textContent = d.error;
+      document.getElementById('bepErr').style.display = 'block';
+      return;
+    }
+    bepData = d;
+    renderBEP(d, 0);
+    document.getElementById('bepResults').style.display = 'block';
+  } catch(e) {
+    document.getElementById('bepLoading').style.display = 'none';
+    document.getElementById('bepEmpty').style.display = 'block';
+    document.getElementById('bepErr').textContent = 'Ошибка соединения';
+    document.getElementById('bepErr').style.display = 'block';
+  }
+}
+
+function reloadBEP() {
+  document.getElementById('bepResults').style.display = 'none';
+  document.getElementById('bepEmpty').style.display = 'block';
+}
+
+function recalcBEP() {
+  if(!bepData) return;
+  var cogs = parseFloat(document.getElementById('cogsInput').value) || 0;
+  renderBEP(bepData, cogs);
+}
+
+function renderBEP(d, cogs) {
+  var fixedTotal    = d.avg_fixed + cogs;
+  var varTotal      = d.avg_variable;
+  var varRatio      = d.variable_ratio / 100;
+  var cmRatio       = 1 - varRatio;
+  var bep           = cmRatio > 0 ? Math.round(fixedTotal / cmRatio) : 0;
+  var safety        = Math.round(d.avg_revenue - bep);
+  var safetyPct     = d.avg_revenue > 0 ? Math.round(safety / d.avg_revenue * 100) : 0;
+
+  document.getElementById('bepMeta').textContent = 'Период: ' + d.period + ' · ' + d.n_months + ' мес.';
+  document.getElementById('bKpiRev').textContent    = fmt(d.avg_revenue) + ' ₸';
+  document.getElementById('bKpiFixed').textContent  = fmt(fixedTotal) + ' ₸';
+  document.getElementById('bKpiVar').textContent    = fmt(varTotal) + ' ₸';
+  document.getElementById('bKpiVarPct').textContent = d.variable_ratio + '% от выручки';
+  document.getElementById('bKpiBEP').textContent    = fmt(bep) + ' ₸';
+  var safeEl = document.getElementById('bKpiSafety');
+  safeEl.textContent  = (safety >= 0 ? '+' : '') + fmt(safety) + ' ₸';
+  safeEl.className    = 'kpi-val ' + (safety >= 0 ? 'g' : 'r');
+  document.getElementById('bKpiSafetyPct').textContent = 'запас: ' + safetyPct + '%';
+  document.getElementById('cmRatio').textContent = Math.round(cmRatio * 100) + '%';
+
+  // Fixed breakdown
+  document.getElementById('fixedBreakdown').innerHTML = Object.entries(d.fixed_breakdown).sort(function(a,b){return b[1]-a[1];}).map(function(e){
+    return '<div class="cat-row"><span class="cat-name" style="font-size:11px">'+e[0]+'</span><span class="cat-amt r" style="font-size:11px">'+fmt(e[1])+' ₸</span></div>';
+  }).join('') || '<div style="font-size:12px;color:var(--muted);padding:8px 0">Нет данных</div>';
+
+  // Variable breakdown
+  document.getElementById('varBreakdown').innerHTML = Object.entries(d.variable_breakdown).sort(function(a,b){return b[1]-a[1];}).map(function(e){
+    return '<div class="cat-row"><span class="cat-name" style="font-size:11px">'+e[0]+'</span><span class="cat-amt r" style="font-size:11px">'+fmt(e[1])+' ₸</span></div>';
+  }).join('') || '<div style="font-size:12px;color:var(--muted);padding:8px 0">Нет данных</div>';
+
+  // BEP Chart — waterfall style
+  if(bepChartInst) bepChartInst.destroy();
+  var labels = ['Выручка', 'Пост. затраты', 'Перем. затраты', 'Закуп/COGS', 'Прибыль'];
+  var profit = d.avg_revenue - fixedTotal - varTotal;
+  bepChartInst = new Chart(document.getElementById('bepChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: ['Ср. выручка/мес', 'Пост. затраты', 'Перем. затраты', 'ТБУ (нужно)', 'Запас прочности'],
+      datasets: [{
+        data: [d.avg_revenue, fixedTotal, varTotal, bep, Math.max(0, safety)],
+        backgroundColor: ['rgba(39,174,96,.75)', 'rgba(231,76,60,.75)', 'rgba(231,76,60,.6)', 'rgba(212,160,23,.8)', safety>=0?'rgba(39,174,96,.5)':'rgba(231,76,60,.5)'],
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+        y: { grid: { color: '#F3F4F6' }, ticks: { font: { size: 9 }, callback: function(v){ return v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?(v/1000).toFixed(0)+'K':v; } } }
+      }
+    }
+  });
+
+  // Monthly table
+  document.getElementById('bepMonthly').innerHTML = (d.monthly_table||[]).map(function(m){
+    var s = m.safety >= 0;
+    return '<tr>'+
+      '<td><strong>'+m.month+'</strong></td>'+
+      '<td class="g">'+fmt(m.revenue)+'</td>'+
+      '<td class="r">'+fmt(m.fixed)+'</td>'+
+      '<td class="r">'+fmt(m.variable)+'</td>'+
+      '<td style="font-weight:600">'+fmt(m.bep)+'</td>'+
+      '<td class="'+(s?'g':'r')+'">'+(s?'+':'')+fmt(m.safety)+'</td>'+
+      '<td><span style="background:'+(s?'#D1FAE5':'#FEE2E2')+';color:'+(s?'#15803D':'#DC2626')+';padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">'+(s?'✓ Достигнута':'✗ Не достигнута')+'</span></td>'+
+      '</tr>';
+  }).join('');
+}
+
 </script>
 </body>
 </html>
