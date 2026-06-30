@@ -1,1092 +1,887 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BUSAN FINANCE</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
-// ─── BEP ─────────────────────────────────────────────────────────────────────
-var bepData = null;
-var bepChartInst = null;
+from flask import Flask, request, jsonify, send_file, session
+import os, json, io, math
+from datetime import datetime
+from collections import defaultdict
+import pandas as pd
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
-async function loadBEP() {
-  document.getElementById('bepErr').style.display = 'none';
-  document.getElementById('bepEmpty').style.display = 'none';
-  document.getElementById('bepLoading').style.display = 'block';
-  document.getElementById('bepResults').style.display = 'none';
+app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "busan-finance-2026")
 
-  try {
-    var r = await fetch('/bep-data');
-    var d = await r.json();
-    document.getElementById('bepLoading').style.display = 'none';
-    if(!r.ok) {
-      document.getElementById('bepEmpty').style.display = 'block';
-      document.getElementById('bepErr').textContent = d.error;
-      document.getElementById('bepErr').style.display = 'block';
-      return;
+# Пароль — задаётся через переменную окружения PASSWORD на Railway
+ACCESS_PASSWORD = os.environ.get("PASSWORD", "busan2026")
+
+# Накопительная база — хранится в /tmp/busan_db.json
+DB_PATH = "/tmp/busan_db.json"
+
+NAVY="1A1A2E"; GOLD="D4A017"; WHITE="FFFFFF"; LIGHT="F5F5F0"
+GREEN="27AE60"; RED="C0392B"; GRAY="CCCCCC"
+
+def fill(c): return PatternFill("solid", fgColor=c)
+def font(bold=False, color=WHITE, size=11, italic=False):
+    return Font(name="Arial", bold=bold, color=color, size=size, italic=italic)
+def border_thin():
+    s = Side(style="thin", color=GRAY)
+    return Border(left=s, right=s, top=s, bottom=s)
+
+CATEGORIES = {
+    "Перевод собственнику":  ["карту kaspi gold","kaspi gold *"],
+    "Выручка Kaspi.kz":      ["продажи с kaspi.kz","возмещение коммерсанту"],
+    "Зарплата / ФОТ":        ["оплата заработной платы","заработная плата","зарплата","salary","оклад","выплата зарплат","фот"],
+    "Налоги / взносы":       ["налог","ипн","соц","пенсион","опв","снп","осмс","источника выплаты","облагаемых","единый совокупный","астана ерц","ерц"],
+    "Аренда":                ["аренд","rent","найм"],
+    "Реклама / маркетинг":   ["реклам","маркетинг","продвижен","smm","таргет","instagram","facebook","google ads","яндекс директ","объявлен","рекламных услуг"],
+    "Процессинг / эквайринг":["процессинг","эквайринг","расчеты по картам","расчеты по карточкам","pos-терминал","pos терминал","acquiring","расчёты по карт","услуги процессинга","услуг процессинга","оплата за услуги операций по картам"],
+    "Логистика / курьер":    ["доставк","логистик","курьер","express","dhl","cdek","сдэк","почтовые"],
+    "Кредит / займ":         ["погашение","бизнес кредит","кредит","займ","ссуда","резервирование средств"],
+    "Возврат покупателю":    ["возврат продаж","возврат средств","возврат оплаты","за непредоставленные усл"],
+    "Продукты / питание":    ["магазин","супермарк","продукт","еда","food","market","magnum","small"],
+    "Кафе / рестораны":      ["кафе","ресторан","cafe","restaurant","coffee","кофе"],
+    "Транспорт":             ["такси","uber","yandex go","яндекс такси","bolt","автобус","транспорт","parking"],
+    "Связь / интернет":      ["beeline","kcell","activ","altel","tele2","билайн","интернет","связь"],
+    "Подписки / сервисы":    ["netflix","spotify","apple","youtube","подписк"],
+    "Образование":           ["курс","обучен","образован","школ","универс","тренинг","семинар"],
+    "Здоровье / медицина":   ["аптек","клиник","больниц","медицин","pharmacy","dental","стомат","europharma"],
+    "Красота / уход":        ["салон","beauty","spa","cosmetic","косметик"],
+    "Банковские расходы":    ["комисси","обслуживан","штраф","пени","оплата за информационно","оплата услуги по обработке","оплата услуг по обработке","за операций по картам","страховую премию","страхован"],
+    "IT / сервисы":          ["it","разработк","программ","software","хостинг","домен"],
+    "Инвестиции":            ["инвестиц","депозит","брокер","акци","облигац"],
+    "Профессиональные услуги":["профессиональные","научные и технические","консультац","юридич","бухгалтер","нотариус"],
+    "Доход от клиентов":     ["поступление от клиент","оплата от клиент","гонорар","вознагражд","выручка","комисс омк","перевод денежных средств по дог"],
+    "Выручка по карточкам":  ["расчеты по карточкам","расчёты по карточкам","расчеты по картам","расчёты по картам","зачисление по pos","зачисл по pos","by card","эквайринг зачислен"],
+    "Торговая выручка":      ["за товары","оплата за товар","реализац товар","расчет за товар"],
+}
+
+
+# Признаки внутренних переводов (между своими счетами) — исключаются из P&L
+INTERNAL_PATTERNS = [
+    "kaspipay на депозит",
+    "депозит u35337359",
+    "перевод со счета u35337359",
+    "перевод со счета kaspipay",
+    "со своего kaspi gold на счет в kaspi pay",   # поступление от собственника — внутреннее
+    "собственных средств на свой счет в другом банке",
+    "переводы между счетами",
+    "переводы клиентом денег с одного своего",
+    "без ндс. переводы клиентом",
+    "между своими счетами",
+    "между счетами. без ндс",
+    "перевод с карты на счет ип",
+]
+
+def is_internal(desc):
+    d = str(desc).lower()
+    return any(p in d for p in INTERNAL_PATTERNS)
+
+def categorize(desc):
+    d = str(desc).lower()
+    for cat, kws in CATEGORIES.items():
+        if any(k in d for k in kws): return cat
+    return "Прочие"
+
+def parse_amount(val):
+    if val is None: return 0.0
+    import math
+    if isinstance(val, float) and math.isnan(val): return 0.0
+    try:
+        s = str(val).strip()
+        # Убираем все виды пробелов и неразрывные пробелы
+        s = s.replace("\xa0","").replace("\u202f","").replace("\u00a0","").replace(" ","")
+        s = s.replace(",",".")
+        return float(s)
+    except: return 0.0
+
+def clean(v):
+    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)): return 0.0
+    return v
+
+def detect_bank(filename, filepath):
+    fn = filename.lower()
+    if "kaspi" in fn: return "Kaspi"
+    if "бцк" in fn or "bcc" in fn or "bck" in fn or "centercredit" in fn or "цк" in fn: return "БЦК"
+    if "halyk" in fn or "народн" in fn or "hsbk" in fn: return "Halyk"
+    if "freedom" in fn or "ffin" in fn: return "Freedom"
+    try:
+        df = pd.read_excel(filepath, header=None, nrows=10)
+        text = " ".join(df.fillna("").astype(str).values.flatten()).lower()
+        if "kaspi" in text: return "Kaspi"
+        if "центркредит" in text or "centercredit" in text or "kcjbkzkx" in text: return "БЦК"
+        if "halyk" in text or "народный" in text or "hsbkkzkx" in text or "народный банк" in text: return "Halyk"
+        if "freedom" in text or "ffin" in text: return "Freedom"
+    except: pass
+    return "Другой"
+
+
+
+def parse_kaspi(filepath):
+    """Парсер выписки Kaspi Bank"""
+    transactions = []
+    try:
+        engine = "xlrd" if filepath.endswith(".xls") else "openpyxl"
+        raw = pd.read_excel(filepath, header=None, engine=engine)
+
+        header_row = None
+        for i, row in raw.iterrows():
+            vals = [str(v) for v in row.values]
+            if any("Дата операции" in v or "Дата" in v for v in vals) and any("Дебет" in v for v in vals):
+                header_row = i
+                break
+        if header_row is None:
+            return transactions
+
+        df = pd.read_excel(filepath, skiprows=header_row, header=0, engine=engine)
+        df.columns = [str(c).strip() for c in df.columns]
+
+        date_col   = next((c for c in df.columns if "Дата" in c), None)
+        debit_col  = next((c for c in df.columns if c.strip() == "Дебет"), None)
+        credit_col = next((c for c in df.columns if c.strip() == "Кредит"), None)
+        desc_col   = next((c for c in df.columns if "Назначение" in c), None)
+        name_col   = next((c for c in df.columns if "бенефициара" in c or "Наименование" in c), None)
+
+        if not date_col: return transactions
+
+        for _, row in df.iterrows():
+            try:
+                date_str = str(row.get(date_col, "")).strip()
+                if not date_str or date_str == "nan": continue
+                date = pd.to_datetime(date_str[:10], dayfirst=True, errors="coerce")
+                if pd.isna(date): continue
+
+                debit  = parse_amount(row.get(debit_col,  0)) if debit_col  else 0.0
+                credit = parse_amount(row.get(credit_col, 0)) if credit_col else 0.0
+                if debit == 0 and credit == 0: continue
+
+                desc = str(row.get(desc_col, "")).strip() if desc_col else ""
+                if desc == "nan" or not desc:
+                    desc = str(row.get(name_col, "")).strip() if name_col else ""
+                if desc == "nan": desc = ""
+
+                cat = categorize(desc)
+                internal = is_internal(desc)
+                transactions.append({
+                    "date":  date.strftime("%Y-%m-%d"),
+                    "month": date.strftime("%Y-%m"),
+                    "bank":  "Kaspi",
+                    "description": desc,
+                    "debit":  debit,
+                    "credit": credit,
+                    "category": "Внутренний перевод" if internal else cat,
+                    "type":   "expense" if debit > 0 else "income",
+                    "amount": debit if debit > 0 else credit,
+                    "internal": internal,
+                })
+            except: continue
+    except Exception as e:
+        print(f"Kaspi parse error: {e}")
+    return transactions
+
+
+def parse_halyk(filepath):
+    """Парсер выписки Halyk Bank (Народный Банк)"""
+    transactions = []
+    try:
+        engine = "xlrd" if filepath.endswith(".xls") else "openpyxl"
+        raw = pd.read_excel(filepath, header=None, engine=engine)
+
+        # Ищем строку заголовка — содержит Дебет И Кредит И Назначение
+        header_row = None
+        for i, row in raw.iterrows():
+            vals = [str(v) for v in row.values]
+            has_debit   = any("Дебет" in v for v in vals)
+            has_credit  = any("Кредит" in v for v in vals)
+            has_purpose = any("Назначение" in v or "назначение" in v for v in vals)
+            if has_debit and has_credit and has_purpose:
+                header_row = i
+                break
+
+        if header_row is None:
+            return transactions
+
+        df = pd.read_excel(filepath, skiprows=header_row, header=0, engine=engine)
+        df.columns = [str(c).strip() for c in df.columns]
+
+        # Ищем колонки по названию
+        date_col    = next((c for c in df.columns if "Дата" in c), None)
+        debit_col   = next((c for c in df.columns if c.strip() == "Дебет"), None)
+        credit_col  = next((c for c in df.columns if c.strip() == "Кредит"), None)
+        desc_col    = next((c for c in df.columns if "Назначение" in c), None)
+        # Fallback — берём последнюю текстовую колонку перед числовыми
+        if not desc_col:
+            desc_col = next((c for c in reversed(df.columns) if "назначен" in c.lower() or "платеж" in c.lower()), None)
+
+        if not date_col or not desc_col:
+            return transactions
+
+        for _, row in df.iterrows():
+            try:
+                date_str = str(row.get(date_col, "")).strip()
+                if not date_str or date_str in ("nan", "Итого оборот", "Исходящий"):
+                    continue
+                date = pd.to_datetime(date_str[:10], dayfirst=True, errors="coerce")
+                if pd.isna(date):
+                    continue
+
+                debit  = parse_amount(row.get(debit_col,  0)) if debit_col  else 0.0
+                credit = parse_amount(row.get(credit_col, 0)) if credit_col else 0.0
+                if debit == 0 and credit == 0:
+                    continue
+
+                desc = str(row.get(desc_col, "")).strip()
+                if desc in ("nan", ""):
+                    # Попробуем взять из колонки Контрагент
+                    cont_col = next((c for c in df.columns if "Контрагент" in c), None)
+                    if cont_col:
+                        desc = str(row.get(cont_col, "")).strip()
+                if desc == "nan":
+                    desc = ""
+
+                cat = categorize(desc)
+                internal = is_internal(desc)
+
+                # Расчеты по карточкам Halyk — это выручка
+                if "расчеты по карточкам" in desc.lower() or "расчёты по карточкам" in desc.lower():
+                    cat = "Выручка по карточкам"
+                    internal = False
+
+                transactions.append({
+                    "date":  date.strftime("%Y-%m-%d"),
+                    "month": date.strftime("%Y-%m"),
+                    "bank":  "Halyk",
+                    "description": desc,
+                    "debit":  debit,
+                    "credit": credit,
+                    "category": "Внутренний перевод" if internal else cat,
+                    "type":   "expense" if debit > 0 else "income",
+                    "amount": debit if debit > 0 else credit,
+                    "internal": internal,
+                })
+            except:
+                continue
+    except Exception as e:
+        print(f"Halyk parse error: {e}")
+    return transactions
+
+def parse_bcc(filepath):
+    """Парсер выписки Банк ЦентрКредит (БЦК)"""
+    transactions = []
+    try:
+        engine = "xlrd" if filepath.endswith(".xls") else "openpyxl"
+        raw = pd.read_excel(filepath, header=None, engine=engine)
+
+        # Ищем строку-заголовок (содержит "Дебет" и "Кредит")
+        header_row = None
+        for i, row in raw.iterrows():
+            vals = [str(v) for v in row.values]
+            if any("Дебет" in v or "Дата" in v for v in vals) and any("Кредит" in v for v in vals):
+                header_row = i
+                break
+        if header_row is None:
+            return transactions
+
+        df = pd.read_excel(filepath, skiprows=header_row, header=0, engine=engine)
+        df.columns = [str(c).strip() for c in df.columns]
+
+        # Находим нужные колонки
+        date_col  = next((c for c in df.columns if "Дата" in c or "Күні" in c), None)
+        debit_col = next((c for c in df.columns if "Дебет" in c), None)
+        credit_col= next((c for c in df.columns if "Кредит" in c and "конверт" not in c.lower()), None)
+        desc_col  = next((c for c in df.columns if "Назначение" in c or "мақсаты" in c), None)
+
+        if not date_col: return transactions
+
+        for _, row in df.iterrows():
+            try:
+                date_str = str(row.get(date_col, "")).strip()
+                if not date_str or date_str == "nan": continue
+                # Формат даты БЦК: "26.12.2025 06:10:02"
+                date = pd.to_datetime(date_str[:10], dayfirst=True, errors="coerce")
+                if pd.isna(date): continue
+
+                debit  = parse_amount(row.get(debit_col,  0)) if debit_col  else 0.0
+                credit = parse_amount(row.get(credit_col, 0)) if credit_col else 0.0
+
+                if debit == 0 and credit == 0: continue
+
+                desc = str(row.get(desc_col, "")).strip() if desc_col else ""
+                if desc == "nan": desc = ""
+
+                cat = categorize(desc)
+                internal = is_internal(desc)
+                transactions.append({
+                    "date":  date.strftime("%Y-%m-%d"),
+                    "month": date.strftime("%Y-%m"),
+                    "bank":  "БЦК",
+                    "description": desc,
+                    "debit":  debit,
+                    "credit": credit,
+                    "category": "Внутренний перевод" if internal else cat,
+                    "type":   "expense" if debit > 0 else "income",
+                    "amount": debit if debit > 0 else credit,
+                    "internal": internal,
+                })
+            except: continue
+    except Exception as e:
+        print(f"БЦК parse error: {e}")
+    return transactions
+
+
+def parse_file(filepath, bank):
+    transactions = []
+    try:
+        # БЦК имеет нестандартный формат — специальный парсер
+        if bank == "БЦК":
+            return parse_bcc(filepath)
+        if bank == "Kaspi":
+            return parse_kaspi(filepath)
+        if bank in ("Halyk", "Народный"):
+            return parse_halyk(filepath)
+
+        raw = pd.read_excel(filepath, header=None, nrows=20)
+        header_row = None
+        for i, row in raw.iterrows():
+            vals = [str(v).lower() for v in row.values]
+            score = sum(1 for v in vals if any(k in v for k in ["дата","date","сумм","дебет","кредит","списан","зачислен"]))
+            if score >= 2: header_row = i; break
+        if header_row is None: header_row = 0
+        df = pd.read_excel(filepath, skiprows=header_row, header=0)
+        df.columns = [str(c).strip() for c in df.columns]
+        date_col = next((c for c in df.columns if any(k in c.lower() for k in ["дата","date"])), None)
+        if not date_col: return []
+        for _, row in df.iterrows():
+            try:
+                date = pd.to_datetime(str(row.get(date_col,"")), dayfirst=True, errors="coerce")
+                if pd.isna(date): continue
+                debit = credit = 0.0
+                for col in df.columns:
+                    v = parse_amount(row.get(col, 0))
+                    cl = col.lower()
+                    if any(k in cl for k in ["списан","расход","дебет","debit","дт"]): debit = abs(v)
+                    elif any(k in cl for k in ["зачислен","приход","кредит","credit","кт"]): credit = abs(v)
+                if debit == 0 and credit == 0: continue
+                desc = ""
+                for col in df.columns:
+                    if any(k in col.lower() for k in ["назначен","описан","получатель","контрагент","purpose"]):
+                        v = str(row.get(col,"")).strip()
+                        if v and v.lower() != "nan": desc = v; break
+                cat = categorize(desc)
+                internal = is_internal(desc)
+                transactions.append({
+                    "date": date.strftime("%Y-%m-%d"),
+                    "month": date.strftime("%Y-%m"),
+                    "bank": bank, "description": desc,
+                    "debit": debit, "credit": credit,
+                    "category": "Внутренний перевод" if internal else cat,
+                    "type": "expense" if debit > 0 else "income",
+                    "amount": debit if debit > 0 else credit,
+                    "internal": internal,
+                })
+            except: continue
+    except Exception as e:
+        print(f"Parse error: {e}")
+    return transactions
+
+# ─── НАКОПИТЕЛЬНАЯ БАЗА ───────────────────────────────────────────────────────
+
+def load_db():
+    try:
+        if os.path.exists(DB_PATH):
+            with open(DB_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except: pass
+    return {"transactions": [], "updated_at": None}
+
+def save_db(db):
+    with open(DB_PATH, "w", encoding="utf-8") as f:
+        json.dump(db, f, ensure_ascii=False)
+
+def merge_transactions(existing, new_txns):
+    """Добавляет только новые транзакции (дедупликация по дате+сумме+описанию)"""
+    existing_keys = set(
+        f"{t['date']}_{t['debit']}_{t['credit']}_{t['description'][:30]}"
+        for t in existing
+    )
+    added = 0
+    for t in new_txns:
+        key = f"{t['date']}_{t['debit']}_{t['credit']}_{t['description'][:30]}"
+        if key not in existing_keys:
+            existing.append(t)
+            existing_keys.add(key)
+            added += 1
+    return added
+
+# ─── АНАЛИТИКА ────────────────────────────────────────────────────────────────
+
+def build_analytics(all_transactions):
+    # Внутренние переводы между своими счетами исключаем из P&L
+    business_txns = [t for t in all_transactions if not t.get("internal")]
+    internal_txns = [t for t in all_transactions if t.get("internal")]
+
+    total_inc = clean(sum(t["credit"] for t in business_txns))
+    total_exp = clean(sum(t["debit"]  for t in business_txns))
+    internal_out = clean(sum(t["debit"]  for t in internal_txns))
+    internal_in  = clean(sum(t["credit"] for t in internal_txns))
+    net = clean(total_inc - total_exp)
+
+    cat_exp = defaultdict(float)
+    cat_inc = defaultdict(float)
+    for t in all_transactions:  # Показываем все категории включая личные
+        if t["type"] == "expense": cat_exp[t["category"]] += t["debit"]
+        else: cat_inc[t["category"]] += t["credit"]
+
+    top_exp = sorted(cat_exp.items(), key=lambda x: -x[1])[:8]
+    top_inc = sorted(cat_inc.items(), key=lambda x: -x[1])[:5]
+
+    # По месяцам
+    monthly = defaultdict(lambda: {"income": 0.0, "expense": 0.0})
+    for t in business_txns:  # Только бизнес операции в динамике
+        if t["type"] == "income": monthly[t["month"]]["income"] += t["credit"]
+        else: monthly[t["month"]]["expense"] += t["debit"]
+    monthly_sorted = [{"month": m, "income": clean(v["income"]), "expense": clean(v["expense"])}
+                      for m, v in sorted(monthly.items())]
+
+    # Категории которые никогда не бывают расходами
+    INCOME_ONLY_CATS = {"Зарплата / доход", "Доход от клиентов", "Выручка Kaspi.kz", "Выручка по карточкам", "Торговая выручка", "Переводы входящие", "Выручка по карточкам Halyk"}
+
+    # Расходы по категориям и месяцам
+    months_list = [m["month"] for m in monthly_sorted]
+    cat_monthly = defaultdict(lambda: defaultdict(float))
+    for t in all_transactions:
+        if t["type"] == "expense" and not t.get("internal") and t["category"] not in INCOME_ONLY_CATS:
+            cat_monthly[t["category"]][t["month"]] += t["debit"]
+
+    cat_monthly_table = []
+    for cat in sorted(cat_monthly.keys()):
+        row = {"category": cat, "total": clean(sum(cat_monthly[cat].values()))}
+        for m in months_list:
+            row[m] = clean(cat_monthly[cat].get(m, 0.0))
+        row["share"] = round(row["total"] / total_exp * 100, 1) if total_exp > 0 else 0
+        cat_monthly_table.append(row)
+    cat_monthly_table.sort(key=lambda x: -x["total"])
+
+    # Категории которые никогда не бывают поступлениями
+    EXPENSE_ONLY_CATS = {"Налоги / взносы", "Аренда", "Транспорт", "Банковские расходы", "Кредит / займ", "Зарплата / ФОТ", "Реклама / маркетинг", "Процессинг / эквайринг", "Логистика / курьер",
+                         "Связь / интернет", "Подписки / сервисы", "Образование",
+                         "Здоровье / медицина", "Красота / уход", "IT / сервисы",
+                         "Перевод собственнику", "Внутренний перевод"}
+
+    # Поступления по категориям
+    cat_income_data = defaultdict(float)
+    for t in all_transactions:
+        if t["type"] == "income" and not t.get("internal") and t["category"] not in EXPENSE_ONLY_CATS:
+            cat_income_data[t["category"]] += t["credit"]
+    cat_income_table = sorted(
+        [{"category": cat, "total": clean(amt),
+          "share": round(amt/total_inc*100, 1) if total_inc > 0 else 0}
+         for cat, amt in cat_income_data.items()],
+        key=lambda x: -x["total"]
+    )
+
+    # По банкам
+    bank_data = defaultdict(lambda: {"income": 0.0, "expense": 0.0, "count": 0})
+    for t in all_transactions:
+        bank_data[t["bank"]]["income"]  += t["credit"]
+        bank_data[t["bank"]]["expense"] += t["debit"]
+        bank_data[t["bank"]]["count"]   += 1
+    banks_list = [{"bank": b, "income": clean(v["income"]), "expense": clean(v["expense"]), "count": v["count"]}
+                  for b, v in bank_data.items()]
+
+    recommendations = generate_recommendations(all_transactions, total_inc, total_exp, net, cat_exp, monthly_sorted)
+
+    return {
+        "total": len(all_transactions),
+        "total_income": total_inc,
+        "total_expense": total_exp,
+        "internal_out": internal_out,
+        "internal_in": internal_in,
+        "internal_count": len(internal_txns),
+        "net_cashflow": net,
+        "banks": banks_list,
+        "months": months_list,
+        "top_expenses": [{"category": k, "amount": clean(v)} for k,v in top_exp],
+        "top_income":   [{"category": k, "amount": clean(v)} for k,v in top_inc],
+        "monthly": monthly_sorted,
+        "cat_monthly": cat_monthly_table,
+        "cat_income": cat_income_table,
+        "recommendations": recommendations,
     }
-    bepData = d;
-    renderBEP(d, 0);
-    document.getElementById('bepResults').style.display = 'block';
-  } catch(e) {
-    document.getElementById('bepLoading').style.display = 'none';
-    document.getElementById('bepEmpty').style.display = 'block';
-    document.getElementById('bepErr').textContent = 'Ошибка соединения';
-    document.getElementById('bepErr').style.display = 'block';
-  }
-}
-
-function reloadBEP() {
-  document.getElementById('bepResults').style.display = 'none';
-  document.getElementById('bepEmpty').style.display = 'block';
-}
-
-function recalcBEP() {
-  if(!bepData) return;
-  var cogs = parseFloat(document.getElementById('cogsInput').value) || 0;
-  renderBEP(bepData, cogs);
-}
-
-function renderBEP(d, cogs) {
-  var fixedTotal    = d.avg_fixed + cogs;
-  var varTotal      = d.avg_variable;
-  var varRatio      = d.variable_ratio / 100;
-  var cmRatio       = 1 - varRatio;
-  var bep           = cmRatio > 0 ? Math.round(fixedTotal / cmRatio) : 0;
-  var safety        = Math.round(d.avg_revenue - bep);
-  var safetyPct     = d.avg_revenue > 0 ? Math.round(safety / d.avg_revenue * 100) : 0;
-
-  document.getElementById('bepMeta').textContent = 'Период: ' + d.period + ' · ' + d.n_months + ' мес.';
-  document.getElementById('bKpiRev').textContent    = fmt(d.avg_revenue) + ' ₸';
-  document.getElementById('bKpiFixed').textContent  = fmt(fixedTotal) + ' ₸';
-  document.getElementById('bKpiVar').textContent    = fmt(varTotal) + ' ₸';
-  document.getElementById('bKpiVarPct').textContent = d.variable_ratio + '% от выручки';
-  document.getElementById('bKpiBEP').textContent    = fmt(bep) + ' ₸';
-  var safeEl = document.getElementById('bKpiSafety');
-  safeEl.textContent  = (safety >= 0 ? '+' : '') + fmt(safety) + ' ₸';
-  safeEl.className    = 'kpi-val ' + (safety >= 0 ? 'g' : 'r');
-  document.getElementById('bKpiSafetyPct').textContent = 'запас: ' + safetyPct + '%';
-  document.getElementById('cmRatio').textContent = Math.round(cmRatio * 100) + '%';
-
-  // Fixed breakdown
-  document.getElementById('fixedBreakdown').innerHTML = Object.entries(d.fixed_breakdown).sort(function(a,b){return b[1]-a[1];}).map(function(e){
-    return '<div class="cat-row"><span class="cat-name" style="font-size:11px">'+e[0]+'</span><span class="cat-amt r" style="font-size:11px">'+fmt(e[1])+' ₸</span></div>';
-  }).join('') || '<div style="font-size:12px;color:var(--muted);padding:8px 0">Нет данных</div>';
-
-  // Variable breakdown
-  document.getElementById('varBreakdown').innerHTML = Object.entries(d.variable_breakdown).sort(function(a,b){return b[1]-a[1];}).map(function(e){
-    return '<div class="cat-row"><span class="cat-name" style="font-size:11px">'+e[0]+'</span><span class="cat-amt r" style="font-size:11px">'+fmt(e[1])+' ₸</span></div>';
-  }).join('') || '<div style="font-size:12px;color:var(--muted);padding:8px 0">Нет данных</div>';
-
-  // BEP Chart — waterfall style
-  if(bepChartInst) bepChartInst.destroy();
-  var labels = ['Выручка', 'Пост. затраты', 'Перем. затраты', 'Закуп/COGS', 'Прибыль'];
-  var profit = d.avg_revenue - fixedTotal - varTotal;
-  bepChartInst = new Chart(document.getElementById('bepChart').getContext('2d'), {
-    type: 'bar',
-    data: {
-      labels: ['Ср. выручка/мес', 'Пост. затраты', 'Перем. затраты', 'ТБУ (нужно)', 'Запас прочности'],
-      datasets: [{
-        data: [d.avg_revenue, fixedTotal, varTotal, bep, Math.max(0, safety)],
-        backgroundColor: ['rgba(39,174,96,.75)', 'rgba(231,76,60,.75)', 'rgba(231,76,60,.6)', 'rgba(212,160,23,.8)', safety>=0?'rgba(39,174,96,.5)':'rgba(231,76,60,.5)'],
-        borderRadius: 4,
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
-        y: { grid: { color: '#F3F4F6' }, ticks: { font: { size: 9 }, callback: function(v){ return v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?(v/1000).toFixed(0)+'K':v; } } }
-      }
-    }
-  });
-
-  // Monthly table
-  document.getElementById('bepMonthly').innerHTML = (d.monthly_table||[]).map(function(m){
-    var s = m.safety >= 0;
-    return '<tr>'+
-      '<td><strong>'+m.month+'</strong></td>'+
-      '<td class="g">'+fmt(m.revenue)+'</td>'+
-      '<td class="r">'+fmt(m.fixed)+'</td>'+
-      '<td class="r">'+fmt(m.variable)+'</td>'+
-      '<td style="font-weight:600">'+fmt(m.bep)+'</td>'+
-      '<td class="'+(s?'g':'r')+'">'+(s?'+':'')+fmt(m.safety)+'</td>'+
-      '<td><span style="background:'+(s?'#D1FAE5':'#FEE2E2')+';color:'+(s?'#15803D':'#DC2626')+';padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">'+(s?'✓ Достигнута':'✗ Не достигнута')+'</span></td>'+
-      '</tr>';
-  }).join('');
-}
-
-</script>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-:root{--navy:#1A1A2E;--gold:#D4A017;--gold-l:#F0C040;--cream:#F8F6F0;--white:#fff;--green:#27AE60;--red:#E74C3C;--text:#1A1A2E;--muted:#6B7280;--border:#E5E7EB;--surf:#F9F8F5}
-body{font-family:'Segoe UI',sans-serif;background:var(--cream);color:var(--text);min-height:100vh}
-
-/* HEADER */
-header{background:var(--navy);height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:100;border-bottom:1px solid rgba(212,160,23,.3)}
-.logo{display:flex;align-items:center;gap:10px}
-.logo-mark{width:32px;height:32px;background:var(--gold);border-radius:7px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:var(--navy)}
-.logo-name{font-size:14px;font-weight:700;color:#fff}
-.logo-sub{font-size:9px;color:var(--gold);letter-spacing:2px}
-.hdr-right{display:flex;align-items:center;gap:12px}
-.badge{font-size:10px;color:var(--gold);border:1px solid rgba(212,160,23,.4);padding:3px 10px;border-radius:12px}
-.btn-logout{background:transparent;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer;display:none}
-.btn-logout:hover{color:#fff}
-
-/* LOGIN */
-#loginSection{display:none;align-items:center;justify-content:center;min-height:calc(100vh - 56px);padding:20px}
-.login-card{background:var(--white);border:1px solid var(--border);border-radius:16px;padding:48px 40px;text-align:center;width:100%;max-width:380px}
-.login-title{font-size:20px;font-weight:700;color:var(--navy);margin-bottom:6px}
-.login-sub{font-size:13px;color:var(--muted);margin-bottom:24px}
-.login-input{width:100%;padding:12px 16px;border:1px solid var(--border);border-radius:8px;font-size:15px;outline:none;text-align:center;letter-spacing:4px;font-family:monospace}
-.login-input:focus{border-color:var(--gold)}
-.btn-login{width:100%;margin-top:12px;background:var(--navy);color:var(--gold);border:none;border-radius:8px;padding:13px;font-size:14px;font-weight:700;cursor:pointer}
-.login-err{color:var(--red);font-size:12px;margin-top:8px;display:none}
-
-/* APP LAYOUT */
-#appSection{display:none}
-.app-layout{display:flex;min-height:calc(100vh - 56px)}
-.sidebar{width:190px;background:var(--navy);flex-shrink:0;padding:20px 0;min-height:calc(100vh - 56px);border-right:1px solid rgba(255,255,255,.08)}
-.sidebar-label{font-size:9px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:1.5px;padding:0 16px;margin-bottom:8px}
-.nav-item{display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;color:rgba(255,255,255,.55);transition:all .15s;background:none;border:none;width:calc(100% - 16px);margin:0 8px 2px;text-align:left}
-.nav-item:hover{background:rgba(255,255,255,.07);color:rgba(255,255,255,.9)}
-.nav-item.active{background:rgba(212,160,23,.15);color:var(--gold)}
-.page-content{flex:1;padding:28px 28px 80px;overflow-x:hidden}
-
-/* SECTIONS */
-.page{display:none}
-.page.active{display:block}
-
-/* DB BANNER */
-.db-banner{background:var(--navy);border-radius:10px;padding:12px 18px;margin-bottom:18px;display:none;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
-.db-info{color:#fff;font-size:12px}
-.db-info span{color:var(--gold);font-weight:700}
-.db-actions{display:flex;gap:8px}
-.btn-sm{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none}
-.btn-view{background:var(--gold);color:var(--navy)}
-.btn-clear{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2)!important}
-
-/* UPLOAD CARD */
-.upload-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:36px 28px;text-align:center;margin-bottom:18px;max-width:680px;margin-left:auto;margin-right:auto}
-.upload-title{font-size:19px;font-weight:700;color:var(--navy);margin-bottom:6px}
-.upload-desc{font-size:13px;color:var(--muted);margin-bottom:18px}
-.bank-tags{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:18px}
-.tag{padding:4px 12px;border-radius:12px;font-size:11px;font-weight:600;border:1.5px solid}
-.tag.k{background:#FEF2F2;color:#DC2626;border-color:#FCA5A5}
-.tag.h{background:#F0FDF4;color:#16A34A;border-color:#86EFAC}
-.tag.f{background:#EFF6FF;color:#2563EB;border-color:#93C5FD}
-.tag.b{background:#FFF7ED;color:#C2410C;border-color:#FDBA74}
-.tag.o{background:var(--surf);color:var(--muted);border-color:var(--border)}
-.drop-zone{border:2px dashed var(--border);border-radius:10px;padding:24px;cursor:pointer;background:var(--surf);position:relative;transition:all .2s}
-.drop-zone:hover,.drop-zone.has-files{border-color:var(--gold);background:#FDFBF4}
-.drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
-.drop-text{font-size:13px;color:var(--muted)}
-.drop-text span{color:var(--gold);font-weight:600}
-.file-list{margin-top:8px;text-align:left}
-.file-item{display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--white);border:1px solid var(--border);border-radius:7px;margin-top:4px;font-size:12px}
-.file-item .fn{flex:1;font-weight:500}
-.file-item .rm{color:var(--muted);cursor:pointer}
-.file-item .rm:hover{color:var(--red)}
-.mode-row{display:flex;gap:8px;justify-content:center;margin-top:16px}
-.mode-btn{padding:8px 18px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:var(--white);color:var(--muted);transition:all .15s}
-.mode-btn.active{border-color:var(--navy);background:var(--navy);color:var(--gold)}
-.btn-analyze{margin-top:16px;background:var(--navy);color:var(--gold);border:none;border-radius:9px;padding:12px 36px;font-size:14px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
-.btn-analyze:hover{opacity:.9}
-.btn-analyze:disabled{opacity:.4;cursor:not-allowed}
-.err-box{background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:10px 14px;color:#DC2626;font-size:13px;margin-top:10px;display:none}
-
-/* LOADING */
-.loading-wrap{display:none;text-align:center;padding:60px 0}
-.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px}
-@keyframes spin{to{transform:rotate(360deg)}}
-
-/* RESULTS */
-.res-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px}
-.res-title{font-size:17px;font-weight:700;color:var(--navy)}
-.res-meta{font-size:11px;color:var(--muted);margin-top:2px}
-.hdr-btns{display:flex;gap:8px;align-items:center}
-.btn-dl{background:var(--gold);color:var(--navy);border:none;border-radius:7px;padding:9px 16px;font-size:12px;font-weight:700;cursor:pointer}
-.btn-back{background:transparent;border:1px solid var(--border);border-radius:7px;padding:8px 14px;font-size:12px;color:var(--muted);cursor:pointer}
-.btn-back:hover{border-color:var(--navy);color:var(--navy)}
-
-/* KPI */
-.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px;margin-bottom:16px}
-.kpi{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:16px;position:relative;overflow:hidden}
-.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--navy)}
-.kpi.inc::before{background:var(--green)}.kpi.exp::before{background:var(--red)}.kpi.net::before{background:var(--gold)}
-.kpi-lbl{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px}
-.kpi-val{font-size:17px;font-weight:800;color:var(--navy)}
-.kpi-val.g{color:var(--green)}.kpi-val.r{color:var(--red)}
-.kpi-sub{font-size:10px;color:#9CA3AF;margin-top:3px}
-
-/* SEC */
-.sec{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:14px}
-.sec-title{font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px}
-.dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
-.dot.g{background:var(--green)}.dot.r{background:var(--red)}.dot.gold{background:var(--gold)}
-.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-@media(max-width:720px){.two{grid-template-columns:1fr}}
-.chart-wrap{position:relative;height:200px}
-
-/* CAT ROWS */
-.cat-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)}
-.cat-row:last-child{border-bottom:none}
-.cat-name{flex:1;font-size:12px;font-weight:500}
-.cat-bar-wrap{width:100px}
-.cat-bar-track{height:5px;background:var(--border);border-radius:3px;overflow:hidden}
-.cat-bar-fill{height:100%;border-radius:3px}
-.cat-bar-fill.exp{background:var(--red)}.cat-bar-fill.inc{background:var(--green)}
-.cat-amt{font-size:12px;font-weight:600;text-align:right;min-width:85px}
-.cat-share{font-size:11px;color:var(--muted);min-width:36px;text-align:right}
-
-/* BANK ROWS */
-.bank-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px}
-.bank-row:last-child{border-bottom:none}
-.bank-cell{display:flex;align-items:center;gap:8px}
-.bank-logo{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:10px;flex-shrink:0}
-.bank-logo.kaspi{background:#E8192C;color:#fff}
-.bank-logo.halyk{background:#00A650;color:#fff}
-.bank-logo.freedom{background:#0055A5;color:#fff}
-.bank-logo.bcc{background:#FF6B00;color:#fff}
-.bank-logo.other{background:#6B7280;color:#fff}
-.bank-nums{display:flex;gap:14px}
-.bank-num-lbl{font-size:10px;color:var(--muted)}
-.bank-num-val{font-size:12px;font-weight:600}
-
-/* INT BANNER */
-.int-banner{background:#FFFBEB;border:1px solid #FCD34D;border-radius:10px;padding:12px 18px;margin-bottom:14px;display:none;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
-.int-label{font-size:12px;font-weight:700;color:#92400E}
-.int-sub{font-size:11px;color:var(--muted);margin-top:2px}
-.int-stats{display:flex;gap:18px}
-.int-stat-lbl{font-size:10px;color:var(--muted)}
-.int-stat-val{font-size:14px;font-weight:700}
-
-/* TABLES */
-.m-table{width:100%;border-collapse:collapse;font-size:11px}
-.m-table th{background:var(--navy);color:var(--gold);padding:7px 10px;text-align:left;font-size:10px;font-weight:600}
-.m-table td{padding:7px 10px;border-bottom:1px solid var(--border)}
-.m-table tr:nth-child(even) td{background:var(--surf)}
-.tbl-wrap{overflow-x:auto}
-.cat-table{width:100%;border-collapse:collapse;font-size:11px;min-width:500px}
-.cat-table th{background:var(--navy);color:var(--gold);padding:6px 10px;text-align:right;font-size:10px;font-weight:600;white-space:nowrap}
-.cat-table th:first-child{text-align:left}
-.cat-table td{padding:6px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
-.cat-table td:first-child{text-align:left;font-weight:600;color:var(--navy)}
-.cat-table tr:nth-child(even) td{background:var(--surf)}
-.heat-high{background:#FEE2E2!important;color:#DC2626;font-weight:700}
-.heat-mid{background:#FEF3C7!important;color:#92400E}
-.g{color:var(--green);font-weight:600}.r{color:var(--red);font-weight:600}
-
-/* RECS */
-.rec-list{display:flex;flex-direction:column;gap:8px}
-.rec{display:flex;gap:10px;padding:10px 14px;border-radius:8px;border:1px solid}
-.rec.success{background:#F0FDF4;border-color:#86EFAC}
-.rec.warning{background:#FFFBEB;border-color:#FCD34D}
-.rec.danger{background:#FEF2F2;border-color:#FCA5A5}
-.rec.info{background:#EFF6FF;border-color:#93C5FD}
-.rec-t{font-size:12px;font-weight:700;margin-bottom:2px}
-.rec-d{font-size:11px;color:var(--muted);line-height:1.4}
-.rec.success .rec-t{color:#15803D}.rec.warning .rec-t{color:#92400E}.rec.danger .rec-t{color:#DC2626}.rec.info .rec-t{color:#1D4ED8}
-
-footer{text-align:center;padding:18px;font-size:11px;color:var(--muted);border-top:1px solid var(--border);margin-top:40px}
-</style>
-</head>
-<body>
-
-<header>
-  <div class="logo">
-    <div class="logo-mark">BF</div>
-    <div><div class="logo-name">BUSAN FINANCE</div><div class="logo-sub">ANALYTICS</div></div>
-  </div>
-  <div class="hdr-right">
-    <span class="badge">KUNEKEI GROUP</span>
-    <button class="btn-logout" id="btnLogout" onclick="logout()">Выйти</button>
-  </div>
-</header>
-
-<!-- LOGIN -->
-<div id="loginSection" style="display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 56px);padding:20px">
-  <div class="login-card">
-    <div style="font-size:36px;margin-bottom:14px">🔐</div>
-    <div class="login-title">BUSAN FINANCE</div>
-    <div class="login-sub">Введите пароль для доступа</div>
-    <input class="login-input" type="password" id="pwdInput" placeholder="••••••••">
-    <button class="btn-login" id="btnLogin">Войти</button>
-    <div class="login-err" id="loginErr">Неверный пароль</div>
-  </div>
-</div>
-
-<!-- APP -->
-<div id="appSection" style="display:none">
-<div class="app-layout">
-
-  <!-- SIDEBAR -->
-  <nav class="sidebar">
-    <div style="padding:0 8px;margin-bottom:20px">
-      <div class="sidebar-label">Разделы</div>
-      <button class="nav-item active" id="nav-cashflow" onclick="showPage('cashflow')">
-        <span>💰</span> Cashflow
-      </button>
-      <button class="nav-item" id="nav-stock" onclick="showPage('stock')">
-        <span>📦</span> Товары
-      </button>
-      <button class="nav-item" id="nav-bep" onclick="showPage('bep')">
-        <span>📐</span> Точка БУ
-      </button>
-    </div>
-  </nav>
-
-  <!-- CONTENT -->
-  <div class="page-content">
-
-    <!-- ══ CASHFLOW PAGE ══ -->
-    <div id="page-cashflow" class="page active">
-
-      <!-- DB banner -->
-      <div class="db-banner" id="dbBanner">
-        <div class="db-info">💾 База: <span id="dbTotal">0</span> транзакций · <span id="dbUpdated">—</span> · <span id="dbMonths">—</span></div>
-        <div class="db-actions">
-          <button class="btn-sm btn-view" onclick="viewDb()">📊 Показать отчёт</button>
-          <button class="btn-sm btn-clear" onclick="clearDb()">🗑 Очистить</button>
-        </div>
-      </div>
-
-      <!-- Upload -->
-      <div class="upload-card" id="cfUpload">
-        <div class="upload-title">Анализ банковских выписок</div>
-        <div class="upload-desc">Загрузите выписки — система консолидирует и сформирует cashflow отчёт</div>
-        <div class="bank-tags">
-          <span class="tag k">Kaspi</span><span class="tag h">Halyk</span>
-          <span class="tag f">Freedom</span><span class="tag b">БЦК</span>
-          <span class="tag o">+ другие</span>
-        </div>
-        <div class="drop-zone" id="cfDrop">
-          <input type="file" id="cfFile" multiple accept=".xlsx,.xls">
-          <p class="drop-text">Перетащите файлы или <span>выберите</span></p>
-          <p class="drop-text" style="font-size:11px;opacity:.6;margin-top:3px">Форматы: .xlsx, .xls</p>
-          <div class="file-list" id="cfFileList"></div>
-        </div>
-        <div class="mode-row">
-          <button class="mode-btn active" id="modeAppend" onclick="setMode('append')">➕ Добавить к базе</button>
-          <button class="mode-btn" id="modeReplace" onclick="setMode('replace')">🔄 Заменить базу</button>
-        </div>
-        <div class="err-box" id="cfErr"></div>
-        <button class="btn-analyze" id="cfBtn" onclick="analyzeCF()" disabled>⚡ Анализировать</button>
-      </div>
-
-      <!-- Loading -->
-      <div class="loading-wrap" id="cfLoading">
-        <div class="spinner"></div><p style="color:var(--muted);font-size:13px">Обрабатываем выписки...</p>
-      </div>
-
-      <!-- Results -->
-      <div id="cfResults" style="display:none">
-        <div class="res-hdr">
-          <div><div class="res-title">Cashflow отчёт</div><div class="res-meta" id="cfMeta"></div></div>
-          <div class="hdr-btns">
-            <button class="btn-back" onclick="resetCF()">← Загрузить ещё</button>
-            <button class="btn-dl" onclick="downloadExcel()">⬇ Excel</button>
-          </div>
-        </div>
-
-        <div class="kpi-grid">
-          <div class="kpi inc"><div class="kpi-lbl">Поступления</div><div class="kpi-val g" id="kpiInc">—</div><div class="kpi-sub" id="kpiIncSub"></div></div>
-          <div class="kpi exp"><div class="kpi-lbl">Расходы</div><div class="kpi-val r" id="kpiExp">—</div><div class="kpi-sub" id="kpiExpSub"></div></div>
-          <div class="kpi net"><div class="kpi-lbl">Чистый CF</div><div class="kpi-val" id="kpiNet">—</div><div class="kpi-sub" id="kpiNetSub"></div></div>
-          <div class="kpi"><div class="kpi-lbl">Транзакций</div><div class="kpi-val" id="kpiTxn">—</div><div class="kpi-sub" id="kpiBanks"></div></div>
-        </div>
-
-        <div class="int-banner" id="intBanner">
-          <div><div class="int-label">↔ Внутренние переводы — исключены из P&L</div><div class="int-sub">Переводы между своими счетами не учитываются</div></div>
-          <div class="int-stats">
-            <div><div class="int-stat-lbl">Исходящих</div><div class="int-stat-val r" id="intOut">—</div></div>
-            <div><div class="int-stat-lbl">Входящих</div><div class="int-stat-val g" id="intIn">—</div></div>
-            <div><div class="int-stat-lbl">Операций</div><div class="int-stat-val" id="intCount">—</div></div>
-          </div>
-        </div>
-
-        <div class="two">
-          <div class="sec"><div class="sec-title"><span class="dot gold"></span>Поступления и расходы по месяцам</div><div class="chart-wrap"><canvas id="monthlyChart"></canvas></div></div>
-          <div class="sec"><div class="sec-title"><span class="dot r"></span>Структура расходов</div><div class="chart-wrap"><canvas id="pieChart"></canvas></div></div>
-        </div>
-
-        <div class="sec">
-          <div class="sec-title"><span class="dot r"></span>Расходы — категории и банки</div>
-          <div class="two">
-            <div><div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">По категориям</div><div id="expCats"></div></div>
-            <div><div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">По банкам</div><div id="expBanks"></div></div>
-          </div>
-        </div>
-
-        <div class="sec">
-          <div class="sec-title"><span class="dot g"></span>Поступления — категории и банки</div>
-          <div class="two">
-            <div><div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">По категориям</div><div id="incCats"></div></div>
-            <div><div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">По банкам</div><div id="incBanks"></div></div>
-          </div>
-        </div>
-
-        <div class="sec">
-          <div class="sec-title"><span class="dot r"></span>Расходы по категориям и месяцам</div>
-          <div class="tbl-wrap"><table class="cat-table" id="catMonthTable"></table></div>
-        </div>
-
-        <div class="sec">
-          <div class="sec-title"><span class="dot gold"></span>Динамика по месяцам</div>
-          <div style="overflow-x:auto">
-            <table class="m-table">
-              <thead><tr><th>Месяц</th><th>Поступления (₸)</th><th>Расходы (₸)</th><th>Чистый CF (₸)</th><th>Расходы / Поступления</th></tr></thead>
-              <tbody id="monthlyBody"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="sec"><div class="sec-title"><span class="dot gold"></span>Рекомендации</div><div class="rec-list" id="cfRecs"></div></div>
-      </div>
-    </div><!-- /cashflow page -->
-
-    <!-- ══ STOCK PAGE ══ -->
-    <div id="page-stock" class="page">
-
-      <div class="upload-card" id="stUpload">
-        <div class="upload-title">📦 Анализ складских остатков</div>
-        <div class="upload-desc">Загрузите выгрузку остатков — система построит аналитику по срокам хранения и залежалому товару</div>
-        <div class="drop-zone" id="stDrop">
-          <input type="file" id="stFile" accept=".xlsx,.xls">
-          <p class="drop-text">Перетащите файл или <span>выберите</span></p>
-          <p class="drop-text" style="font-size:11px;opacity:.6;margin-top:3px">Форматы: .xlsx, .xls</p>
-          <div class="file-list" id="stFileList"></div>
-        </div>
-        <div class="err-box" id="stErr"></div>
-        <button class="btn-analyze" id="stBtn" onclick="analyzeStock()" disabled>⚡ Анализировать</button>
-      </div>
-
-      <div class="loading-wrap" id="stLoading">
-        <div class="spinner"></div><p style="color:var(--muted);font-size:13px">Анализируем остатки...</p>
-      </div>
-
-      <div id="stResults" style="display:none">
-        <div class="res-hdr">
-          <div><div class="res-title">Анализ склада</div><div class="res-meta" id="stMeta"></div></div>
-          <button class="btn-back" onclick="resetStock()">← Загрузить другой</button>
-        </div>
-
-        <div class="kpi-grid">
-          <div class="kpi"><div class="kpi-lbl">Позиций</div><div class="kpi-val" id="sKpiItems">—</div><div class="kpi-sub">товарных артикулов</div></div>
-          <div class="kpi"><div class="kpi-lbl">Единиц</div><div class="kpi-val" id="sKpiQty">—</div><div class="kpi-sub">шт. на складе</div></div>
-          <div class="kpi exp"><div class="kpi-lbl">Себестоимость</div><div class="kpi-val r" id="sKpiCost">—</div><div class="kpi-sub">заморожено в товаре</div></div>
-          <div class="kpi inc"><div class="kpi-lbl">Потенциал продаж</div><div class="kpi-val g" id="sKpiRev">—</div><div class="kpi-sub" id="sKpiMargin"></div></div>
-          <div class="kpi net"><div class="kpi-lbl">Замороженный капитал</div><div class="kpi-val" id="sKpiFrozen">—</div><div class="kpi-sub" id="sKpiFrozenPct"></div></div>
-        </div>
-
-        <div class="sec">
-          <div class="sec-title"><span class="dot gold"></span>Анализ по сроку хранения</div>
-          <div style="overflow-x:auto"><table class="m-table" id="ageTable">
-            <thead><tr><th>Возраст</th><th>Позиций</th><th>%</th><th>Единиц</th><th>Себест-сть (₸)</th><th>% себест.</th><th>Потенциал (₸)</th></tr></thead>
-            <tbody id="ageBody"></tbody>
-          </table></div>
-        </div>
-
-        <div class="two">
-          <div class="sec">
-            <div class="sec-title"><span class="dot r"></span>Топ категорий по себестоимости</div>
-            <div id="stCats"></div>
-          </div>
-          <div class="sec">
-            <div class="sec-title"><span class="dot r"></span>Залежалые товары (&gt;180 дней)</div>
-            <div id="deadItems" style="max-height:300px;overflow-y:auto"></div>
-          </div>
-        </div>
-
-        <div class="sec"><div class="sec-title"><span class="dot gold"></span>Рекомендации</div><div class="rec-list" id="stRecs"></div></div>
-      </div>
-    </div><!-- /stock page -->
-
-
-    <!-- ══ BEP PAGE ══ -->
-    <div id="page-bep" class="page">
-
-      <!-- Empty state -->
-      <div id="bepEmpty" style="text-align:center;padding:60px 20px;max-width:500px;margin:0 auto">
-        <div style="font-size:48px;margin-bottom:16px">📐</div>
-        <div style="font-size:18px;font-weight:700;color:var(--navy);margin-bottom:8px">Точка безубыточности</div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:24px;line-height:1.6">
-          Данные берутся автоматически из загруженных выписок.<br>
-          Сначала загрузите выписки в разделе <strong>Cashflow</strong>.
-        </div>
-        <button class="btn-analyze" onclick="loadBEP()" style="margin-top:0">⚡ Рассчитать</button>
-        <div class="err-box" id="bepErr" style="margin-top:12px;text-align:left"></div>
-      </div>
-
-      <!-- Loading -->
-      <div class="loading-wrap" id="bepLoading">
-        <div class="spinner"></div><p style="color:var(--muted);font-size:13px">Рассчитываем точку безубыточности...</p>
-      </div>
-
-      <!-- Results -->
-      <div id="bepResults" style="display:none">
-        <div class="res-hdr">
-          <div><div class="res-title">Точка безубыточности</div><div class="res-meta" id="bepMeta"></div></div>
-          <button class="btn-back" onclick="reloadBEP()">↺ Пересчитать</button>
-        </div>
-
-        <!-- KPI -->
-        <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
-          <div class="kpi inc"><div class="kpi-lbl">Ср. выручка/мес</div><div class="kpi-val g" id="bKpiRev">—</div><div class="kpi-sub">из поступлений</div></div>
-          <div class="kpi exp"><div class="kpi-lbl">Постоянные/мес</div><div class="kpi-val r" id="bKpiFixed">—</div><div class="kpi-sub">аренда, зарплата, связь...</div></div>
-          <div class="kpi exp"><div class="kpi-lbl">Переменные/мес</div><div class="kpi-val r" id="bKpiVar">—</div><div class="kpi-sub" id="bKpiVarPct"></div></div>
-          <div class="kpi net"><div class="kpi-lbl">Точка БУ (выручка)</div><div class="kpi-val" id="bKpiBEP">—</div><div class="kpi-sub">нужно заработать в месяц</div></div>
-          <div class="kpi"><div class="kpi-lbl">Запас прочности</div><div class="kpi-val" id="bKpiSafety">—</div><div class="kpi-sub" id="bKpiSafetyPct"></div></div>
-        </div>
-
-        <!-- Визуализация ТБУ -->
-        <div class="sec">
-          <div class="sec-title"><span class="dot gold"></span>График точки безубыточности</div>
-          <div class="chart-wrap" style="height:240px"><canvas id="bepChart"></canvas></div>
-        </div>
-
-        <!-- Постоянные + Переменные -->
-        <div class="two">
-          <div class="sec">
-            <div class="sec-title"><span class="dot r"></span>Постоянные затраты (в месяц)</div>
-            <div id="fixedBreakdown"></div>
-            <div id="fixedCOGS" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-              <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:600">СЕБЕСТОИМОСТЬ / ЗАКУП (вручную)</div>
-              <div style="display:flex;gap:8px;align-items:center">
-                <input type="number" id="cogsInput" placeholder="0" style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:7px;font-size:13px;outline:none"
-                       oninput="recalcBEP()">
-                <span style="font-size:13px;color:var(--muted)">₸ / мес</span>
-              </div>
-              <div style="font-size:10px;color:var(--muted);margin-top:4px">Укажите среднемесячный закуп товара</div>
-            </div>
-          </div>
-          <div class="sec">
-            <div class="sec-title"><span class="dot r"></span>Переменные затраты (в месяц)</div>
-            <div id="varBreakdown"></div>
-            <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-              <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:600">МАРЖИНАЛЬНЫЙ КОЭФФИЦИЕНТ</div>
-              <div style="font-size:24px;font-weight:800;color:var(--navy)" id="cmRatio">—</div>
-              <div style="font-size:10px;color:var(--muted)">(1 − переменные % от выручки)</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Помесячная таблица -->
-        <div class="sec">
-          <div class="sec-title"><span class="dot gold"></span>Достижение ТБУ по месяцам</div>
-          <div style="overflow-x:auto">
-            <table class="m-table">
-              <thead><tr><th>Месяц</th><th>Выручка (₸)</th><th>Пост. затр. (₸)</th><th>Перем. затр. (₸)</th><th>ТБУ (₸)</th><th>Запас / Дефицит</th><th>Статус</th></tr></thead>
-              <tbody id="bepMonthly"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div><!-- /bep page -->
-
-  </div><!-- /page-content -->
-</div><!-- /app-layout -->
-</div><!-- /appSection -->
-
-<footer>BUSAN FINANCE · KUNEKEI GROUP · Данные защищены · Файлы не хранятся на сервере</footer>
-
-<script>
-// ─── STATE ───────────────────────────────────────────────────────────────────
-var cfFiles = [], cfMode = 'append', mChart = null, pChart = null, stFile = null;
-
-// ─── INIT ────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', function() {
-  // Login
-  document.getElementById('btnLogin').onclick = doLogin;
-  document.getElementById('pwdInput').addEventListener('keydown', function(e) {
-    if(e.key === 'Enter') doLogin();
-  });
-
-  // CF file drop
-  var cfFile = document.getElementById('cfFile');
-  var cfDrop = document.getElementById('cfDrop');
-  cfFile.addEventListener('change', function(e) { addCFFiles([...e.target.files]); });
-  cfDrop.addEventListener('dragover', function(e) { e.preventDefault(); cfDrop.classList.add('has-files'); });
-  cfDrop.addEventListener('dragleave', function() { if(!cfFiles.length) cfDrop.classList.remove('has-files'); });
-  cfDrop.addEventListener('drop', function(e) {
-    e.preventDefault();
-    addCFFiles([...e.dataTransfer.files].filter(function(f){ return f.name.match(/\.xlsx?$/i); }));
-  });
-
-  // Stock file drop
-  var stFileInput = document.getElementById('stFile');
-  var stDrop = document.getElementById('stDrop');
-  stFileInput.addEventListener('change', function(e) { setStockFile(e.target.files[0]); });
-  stDrop.addEventListener('dragover', function(e) { e.preventDefault(); stDrop.classList.add('has-files'); });
-  stDrop.addEventListener('dragleave', function() { if(!stFile) stDrop.classList.remove('has-files'); });
-  stDrop.addEventListener('drop', function(e) {
-    e.preventDefault();
-    var f = [...e.dataTransfer.files].find(function(f){ return f.name.match(/\.xlsx?$/i); });
-    if(f) setStockFile(f);
-  });
-});
-
-// ─── AUTH ────────────────────────────────────────────────────────────────────
-async function doLogin() {
-  var pwd = document.getElementById('pwdInput').value;
-  var r = await fetch('/login', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password: pwd})});
-  var d = await r.json();
-  if(d.ok) {
-    document.getElementById('loginSection').style.display = 'none';
-    document.getElementById('appSection').style.display = 'block';
-    document.getElementById('btnLogout').style.display = 'block';
-    loadDbStats();
-  } else {
-    document.getElementById('loginErr').style.display = 'block';
-  }
-}
-
-async function logout() {
-  await fetch('/logout', {method:'POST'});
-  location.reload();
-}
-
-// ─── NAVIGATION ──────────────────────────────────────────────────────────────
-function showPage(page) {
-  document.querySelectorAll('.page').forEach(function(el) { el.classList.remove('active'); });
-  document.querySelectorAll('.nav-item').forEach(function(el) { el.classList.remove('active'); });
-  document.getElementById('page-' + page).classList.add('active');
-  document.getElementById('nav-' + page).classList.add('active');
-  if(page === 'bep') loadBEP();
-}
-
-// ─── DB STATS ────────────────────────────────────────────────────────────────
-async function loadDbStats() {
-  try {
-    var r = await fetch('/db-stats');
-    if(!r.ok) return;
-    var d = await r.json();
-    if(d.total > 0) {
-      var b = document.getElementById('dbBanner');
-      b.style.display = 'flex';
-      document.getElementById('dbTotal').textContent = d.total;
-      document.getElementById('dbUpdated').textContent = d.updated_at || '—';
-      document.getElementById('dbMonths').textContent = d.months.length ? d.months[0] + ' — ' + d.months[d.months.length-1] : '—';
-    }
-  } catch(e) {}
-}
-
-async function viewDb() {
-  document.getElementById('cfUpload').style.display = 'none';
-  document.getElementById('cfLoading').style.display = 'block';
-  var r = await fetch('/db-analyze');
-  var d = await r.json();
-  document.getElementById('cfLoading').style.display = 'none';
-  if(d.error) { document.getElementById('cfUpload').style.display = 'block'; alert(d.error); return; }
-  renderCF(d);
-  document.getElementById('cfResults').style.display = 'block';
-}
-
-async function clearDb() {
-  if(!confirm('Очистить всю базу данных?')) return;
-  await fetch('/db-clear', {method:'POST'});
-  document.getElementById('dbBanner').style.display = 'none';
-}
-
-// ─── CASHFLOW ────────────────────────────────────────────────────────────────
-function addCFFiles(files) {
-  files.forEach(function(f) { if(!cfFiles.find(function(x){ return x.name===f.name; })) cfFiles.push(f); });
-  renderCFFiles();
-}
-function removeCFFile(i) { cfFiles.splice(i,1); renderCFFiles(); }
-function renderCFFiles() {
-  document.getElementById('cfFileList').innerHTML = cfFiles.map(function(f,i){
-    return '<div class="file-item">📄 <span class="fn">'+f.name+'</span><span class="rm" onclick="removeCFFile('+i+')">✕</span></div>';
-  }).join('');
-  document.getElementById('cfBtn').disabled = cfFiles.length === 0;
-  document.getElementById('cfDrop').classList.toggle('has-files', cfFiles.length > 0);
-}
-function setMode(m) {
-  cfMode = m;
-  document.getElementById('modeAppend').classList.toggle('active', m==='append');
-  document.getElementById('modeReplace').classList.toggle('active', m==='replace');
-}
-
-async function analyzeCF() {
-  document.getElementById('cfErr').style.display = 'none';
-  document.getElementById('cfUpload').style.display = 'none';
-  document.getElementById('cfLoading').style.display = 'block';
-  document.getElementById('cfResults').style.display = 'none';
-  var fd = new FormData();
-  cfFiles.forEach(function(f){ fd.append('files', f); });
-  fd.append('mode', cfMode);
-  try {
-    var r = await fetch('/analyze', {method:'POST', body:fd});
-    var d = await r.json();
-    document.getElementById('cfLoading').style.display = 'none';
-    if(!r.ok) {
-      document.getElementById('cfUpload').style.display = 'block';
-      document.getElementById('cfErr').textContent = d.error;
-      document.getElementById('cfErr').style.display = 'block';
-      return;
-    }
-    renderCF(d);
-    document.getElementById('cfResults').style.display = 'block';
-    loadDbStats();
-  } catch(e) {
-    document.getElementById('cfLoading').style.display = 'none';
-    document.getElementById('cfUpload').style.display = 'block';
-    document.getElementById('cfErr').textContent = 'Ошибка соединения';
-    document.getElementById('cfErr').style.display = 'block';
-  }
-}
-
-function resetCF() {
-  cfFiles = [];
-  renderCFFiles();
-  document.getElementById('cfUpload').style.display = 'block';
-  document.getElementById('cfResults').style.display = 'none';
-}
-
-function downloadExcel() { window.location.href = '/download-excel'; }
-
-// ─── STOCK ───────────────────────────────────────────────────────────────────
-function setStockFile(f) {
-  stFile = f;
-  document.getElementById('stFileList').innerHTML =
-    '<div class="file-item">📄 <span class="fn">'+f.name+'</span><span class="rm" onclick="clearStockFile()">✕</span></div>';
-  document.getElementById('stBtn').disabled = false;
-  document.getElementById('stDrop').classList.add('has-files');
-}
-function clearStockFile() {
-  stFile = null;
-  document.getElementById('stFileList').innerHTML = '';
-  document.getElementById('stBtn').disabled = true;
-  document.getElementById('stDrop').classList.remove('has-files');
-}
-
-async function analyzeStock() {
-  document.getElementById('stErr').style.display = 'none';
-  document.getElementById('stUpload').style.display = 'none';
-  document.getElementById('stLoading').style.display = 'block';
-  document.getElementById('stResults').style.display = 'none';
-  var fd = new FormData();
-  fd.append('files', stFile);
-  try {
-    var r = await fetch('/stock-analyze', {method:'POST', body:fd});
-    var d = await r.json();
-    document.getElementById('stLoading').style.display = 'none';
-    if(!r.ok) {
-      document.getElementById('stUpload').style.display = 'block';
-      document.getElementById('stErr').textContent = d.error;
-      document.getElementById('stErr').style.display = 'block';
-      return;
-    }
-    renderStock(d);
-    document.getElementById('stResults').style.display = 'block';
-  } catch(e) {
-    document.getElementById('stLoading').style.display = 'none';
-    document.getElementById('stUpload').style.display = 'block';
-    document.getElementById('stErr').textContent = 'Ошибка соединения';
-    document.getElementById('stErr').style.display = 'block';
-  }
-}
-
-function resetStock() {
-  clearStockFile();
-  document.getElementById('stUpload').style.display = 'block';
-  document.getElementById('stResults').style.display = 'none';
-}
-
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
-function fmt(n) { return new Intl.NumberFormat('ru-RU').format(Math.round(n||0)); }
-function pct(a,b) { return b>0 ? Math.round(a/b*100) : 0; }
-function bankCls(name) {
-  var n = (name||'').toLowerCase();
-  if(n.includes('kaspi')) return 'kaspi';
-  if(n.includes('halyk')||n.includes('народ')) return 'halyk';
-  if(n.includes('freedom')||n.includes('ffin')) return 'freedom';
-  if(n.includes('бцк')||n.includes('центркред')) return 'bcc';
-  return 'other';
-}
-function bankAbbr(name) {
-  var n = (name||'').toLowerCase();
-  if(n.includes('kaspi')) return 'K';
-  if(n.includes('halyk')||n.includes('народ')) return 'H';
-  if(n.includes('freedom')||n.includes('ffin')) return 'FF';
-  if(n.includes('бцк')) return 'БЦК';
-  return (name||'').substring(0,2).toUpperCase();
-}
-var recIcons = {check:'✅', alert:'🔴', info:'ℹ️', trend:'📈'};
-
-// ─── RENDER CF ───────────────────────────────────────────────────────────────
-function renderCF(d) {
-  var meta = [];
-  if(d.db_total) meta.push(d.db_total + ' транзакций');
-  if(d.db_updated) meta.push('обновлено ' + d.db_updated);
-  document.getElementById('cfMeta').textContent = meta.join(' · ');
-
-  document.getElementById('kpiInc').textContent = fmt(d.total_income) + ' ₸';
-  document.getElementById('kpiIncSub').textContent = (d.banks||[]).length + ' банк(а)';
-  document.getElementById('kpiExp').textContent = fmt(d.total_expense) + ' ₸';
-  document.getElementById('kpiExpSub').textContent = pct(d.total_expense, d.total_income) + '% от поступлений';
-  var net = d.net_cashflow || 0;
-  var kn = document.getElementById('kpiNet');
-  kn.textContent = (net>=0?'+':'') + fmt(net) + ' ₸';
-  kn.className = 'kpi-val ' + (net>=0?'g':'r');
-  document.getElementById('kpiNetSub').textContent = 'Норма сбережений: ' + pct(net, d.total_income) + '%';
-  document.getElementById('kpiTxn').textContent = d.db_total || d.total;
-  document.getElementById('kpiBanks').textContent = (d.banks||[]).map(function(b){ return b.bank; }).join(', ');
-
-  if(d.internal_count > 0) {
-    document.getElementById('intBanner').style.display = 'flex';
-    document.getElementById('intOut').textContent = fmt(d.internal_out) + ' ₸';
-    document.getElementById('intIn').textContent = fmt(d.internal_in) + ' ₸';
-    document.getElementById('intCount').textContent = d.internal_count;
-  }
-
-  // Charts
-  if(mChart) mChart.destroy();
-  mChart = new Chart(document.getElementById('monthlyChart').getContext('2d'), {
-    data: {
-      labels: d.monthly.map(function(m){ return m.month; }),
-      datasets: [
-        {type:'bar', label:'Поступления', data: d.monthly.map(function(m){ return Math.round(m.income); }), backgroundColor:'rgba(39,174,96,.7)', borderRadius:3, yAxisID:'y'},
-        {type:'bar', label:'Расходы', data: d.monthly.map(function(m){ return Math.round(m.expense); }), backgroundColor:'rgba(231,76,60,.7)', borderRadius:3, yAxisID:'y'},
-        {type:'line', label:'Расходы %', data: d.monthly.map(function(m){ return m.income>0?Math.round(m.expense/m.income*100):0; }), borderColor:'#D4A017', borderWidth:2, pointRadius:3, tension:.3, yAxisID:'y2'}
-      ]
-    },
-    options: {responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{labels:{font:{size:10},boxWidth:10}}},
-      scales:{x:{grid:{display:false},ticks:{font:{size:9}}},
-              y:{grid:{color:'#F3F4F6'},ticks:{font:{size:9},callback:function(v){return v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?(v/1000)+'K':v;}},position:'left'},
-              y2:{ticks:{font:{size:9},callback:function(v){return v+'%';}},position:'right',grid:{display:false},min:0,max:150}}}
-  });
-
-  if(pChart) pChart.destroy();
-  var pieData = (d.cat_monthly||[]).filter(function(r){ return r.total>0; });
-  pChart = new Chart(document.getElementById('pieChart').getContext('2d'), {
-    type:'doughnut',
-    data:{labels:pieData.map(function(r){return r.category;}),
-          datasets:[{data:pieData.map(function(r){return Math.round(r.total);}),
-                     backgroundColor:['#E74C3C','#E67E22','#F39C12','#8E44AD','#2980B9','#1ABC9C','#D35400','#27AE60'],borderWidth:0}]},
-    options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{position:'right',labels:{font:{size:9},boxWidth:9,padding:5}}}}
-  });
-
-  // Expense categories
-  var expOnly = (d.cat_monthly||[]).filter(function(r){return r.total>0;});
-  var maxExp = expOnly[0]?.total || 1;
-  document.getElementById('expCats').innerHTML = expOnly.map(function(r){
-    return '<div class="cat-row"><span class="cat-name">'+r.category+'</span>'+
-      '<div class="cat-bar-wrap"><div class="cat-bar-track"><div class="cat-bar-fill exp" style="width:'+Math.round(r.total/maxExp*100)+'%"></div></div></div>'+
-      '<span class="cat-amt r">'+fmt(r.total)+' ₸</span><span class="cat-share">'+r.share+'%</span></div>';
-  }).join('');
-
-  document.getElementById('expBanks').innerHTML = (d.banks||[]).map(function(b){
-    return '<div class="bank-row"><div class="bank-cell">'+
-      '<div class="bank-logo '+bankCls(b.bank)+'">'+bankAbbr(b.bank)+'</div><span style="font-size:12px;font-weight:600">'+b.bank+'</span></div>'+
-      '<div class="bank-nums"><div><div class="bank-num-lbl">Расходы</div><div class="bank-num-val r">'+fmt(b.expense)+' ₸</div></div>'+
-      '<div><div class="bank-num-lbl">Доля</div><div class="bank-num-val">'+pct(b.expense,d.total_expense)+'%</div></div></div></div>';
-  }).join('');
-
-  // Income categories
-  var incOnly = (d.cat_income||[]).filter(function(r){return r.total>0;});
-  var maxInc = incOnly[0]?.total || 1;
-  document.getElementById('incCats').innerHTML = incOnly.length ? incOnly.map(function(r){
-    return '<div class="cat-row"><span class="cat-name">'+r.category+'</span>'+
-      '<div class="cat-bar-wrap"><div class="cat-bar-track"><div class="cat-bar-fill inc" style="width:'+Math.round(r.total/maxInc*100)+'%"></div></div></div>'+
-      '<span class="cat-amt g">'+fmt(r.total)+' ₸</span><span class="cat-share">'+r.share+'%</span></div>';
-  }).join('') : '<div style="font-size:12px;color:var(--muted);padding:12px 0">Нет данных</div>';
-
-  document.getElementById('incBanks').innerHTML = (d.banks||[]).map(function(b){
-    return '<div class="bank-row"><div class="bank-cell">'+
-      '<div class="bank-logo '+bankCls(b.bank)+'">'+bankAbbr(b.bank)+'</div><span style="font-size:12px;font-weight:600">'+b.bank+'</span></div>'+
-      '<div class="bank-nums"><div><div class="bank-num-lbl">Поступления</div><div class="bank-num-val g">'+fmt(b.income)+' ₸</div></div>'+
-      '<div><div class="bank-num-lbl">Доля</div><div class="bank-num-val">'+pct(b.income,d.total_income)+'%</div></div></div></div>';
-  }).join('');
-
-  // Cat/month table
-  var mths = d.months || [];
-  var tbl = '<thead><tr><th>Категория расходов</th>';
-  mths.forEach(function(m){ tbl += '<th>'+m+'</th>'; });
-  tbl += '<th>ИТОГО</th><th>Уд. вес</th></tr></thead><tbody>';
-  expOnly.forEach(function(row){
-    var cls = row.share>20?'heat-high':row.share>10?'heat-mid':'';
-    tbl += '<tr><td>'+row.category+'</td>';
-    mths.forEach(function(m){ var v=row[m]||0; tbl+='<td>'+(v>0?fmt(v):'')+'</td>'; });
-    tbl += '<td class="'+cls+'">'+fmt(row.total)+'</td><td>'+row.share+'%</td></tr>';
-  });
-  tbl += '</tbody>';
-  document.getElementById('catMonthTable').innerHTML = tbl;
-
-  // Monthly table
-  document.getElementById('monthlyBody').innerHTML = (d.monthly||[]).map(function(m){
-    var n = m.income - m.expense; var p = pct(m.expense, m.income);
-    return '<tr><td><strong>'+m.month+'</strong></td><td class="g">'+fmt(m.income)+'</td><td class="r">'+fmt(m.expense)+'</td>'+
-      '<td class="'+(n>=0?'g':'r')+'">'+(n>=0?'+':'')+fmt(n)+'</td>'+
-      '<td style="color:'+(p>80?'#E74C3C':p>60?'#F39C12':'#27AE60')+';font-weight:600">'+p+'%</td></tr>';
-  }).join('');
-
-  // Recs
-  document.getElementById('cfRecs').innerHTML = (d.recommendations||[]).map(function(r){
-    return '<div class="rec '+r.type+'"><span style="font-size:14px">'+(recIcons[r.icon]||'ℹ️')+'</span>'+
-      '<div><div class="rec-t">'+r.title+'</div><div class="rec-d">'+r.text+'</div></div></div>';
-  }).join('');
-}
-
-// ─── RENDER STOCK ─────────────────────────────────────────────────────────────
-function renderStock(d) {
-  document.getElementById('stMeta').textContent = d.total_items + ' позиций · ' + Math.round(d.total_qty) + ' единиц';
-  document.getElementById('sKpiItems').textContent = (d.total_items||0).toLocaleString('ru-RU');
-  document.getElementById('sKpiQty').textContent = Math.round(d.total_qty||0).toLocaleString('ru-RU');
-  document.getElementById('sKpiCost').textContent = fmt(d.total_cost) + ' ₸';
-  document.getElementById('sKpiRev').textContent = fmt(d.total_revenue) + ' ₸';
-  document.getElementById('sKpiMargin').textContent = 'наценка +' + d.avg_margin + '%';
-  var fn = document.getElementById('sKpiFrozen');
-  fn.textContent = fmt(d.frozen_capital) + ' ₸';
-  fn.className = 'kpi-val ' + (d.frozen_share > 30 ? 'r' : 'g');
-  document.getElementById('sKpiFrozenPct').textContent = d.frozen_share + '% склада (>180 дн)';
-
-  var ageColors = {'До 30 дней':'#27AE60','30–90 дней':'#2ECC71','90–180 дней':'#F39C12','180–365 дней':'#E67E22','Более года (365+)':'#E74C3C'};
-  document.getElementById('ageBody').innerHTML = (d.age_table||[]).map(function(r){
-    var c = ageColors[r.age_group]||'#999';
-    var isRed = r.age_group.includes('180')||r.age_group.includes('год');
-    return '<tr><td><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:'+c+';margin-right:6px"></span><strong>'+r.age_group+'</strong></td>'+
-      '<td>'+r.count+'</td><td>'+r.count_share+'%</td><td>'+Math.round(r.qty).toLocaleString('ru-RU')+'</td>'+
-      '<td class="'+(isRed?'r':'')+'">'+fmt(r.cost)+'</td><td>'+r.cost_share+'%</td><td>'+fmt(r.revenue)+'</td></tr>';
-  }).join('');
-
-  var maxCost = (d.categories||[])[0]?.cost || 1;
-  document.getElementById('stCats').innerHTML = (d.categories||[]).slice(0,12).map(function(cat){
-    return '<div class="cat-row"><span class="cat-name" style="font-size:11px">'+cat.category+'</span>'+
-      '<div class="cat-bar-wrap"><div class="cat-bar-track"><div class="cat-bar-fill exp" style="width:'+Math.round(cat.cost/maxCost*100)+'%"></div></div></div>'+
-      '<span class="cat-amt r" style="font-size:11px">'+fmt(cat.cost)+' ₸</span>'+
-      '<span class="cat-share" style="font-size:10px">'+cat.avg_days+'д</span></div>';
-  }).join('');
-
-  document.getElementById('deadItems').innerHTML = (d.dead_items||[]).map(function(item){
-    var color = item.days > 365 ? '#E74C3C' : '#E67E22';
-    return '<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:11px">'+
-      '<div style="font-weight:600;color:var(--navy);margin-bottom:2px">'+item.name.substring(0,50)+'</div>'+
-      '<div style="display:flex;justify-content:space-between;color:var(--muted)">'+
-      '<span>'+item.category+'</span>'+
-      '<span style="color:'+color+';font-weight:700">'+Math.round(item.days)+' дн · '+fmt(item.cost_total)+' ₸</span></div></div>';
-  }).join('') || '<div style="font-size:12px;color:var(--muted);padding:12px 0">Нет залежалых товаров</div>';
-
-  document.getElementById('stRecs').innerHTML = (d.recommendations||[]).map(function(r){
-    return '<div class="rec '+r.type+'"><span style="font-size:14px">'+(recIcons[r.icon]||'ℹ️')+'</span>'+
-      '<div><div class="rec-t">'+r.title+'</div><div class="rec-d">'+r.text+'</div></div></div>';
-  }).join('');
-}
-
-// ─── BEP ─────────────────────────────────────────────────────────────────────
-var bepData = null;
-var bepChartInst = null;
-
-async function loadBEP() {
-  document.getElementById('bepErr').style.display = 'none';
-  document.getElementById('bepEmpty').style.display = 'none';
-  document.getElementById('bepLoading').style.display = 'block';
-  document.getElementById('bepResults').style.display = 'none';
-
-  try {
-    var r = await fetch('/bep-data');
-    var d = await r.json();
-    document.getElementById('bepLoading').style.display = 'none';
-    if(!r.ok) {
-      document.getElementById('bepEmpty').style.display = 'block';
-      document.getElementById('bepErr').textContent = d.error;
-      document.getElementById('bepErr').style.display = 'block';
-      return;
-    }
-    bepData = d;
-    renderBEP(d, 0);
-    document.getElementById('bepResults').style.display = 'block';
-  } catch(e) {
-    document.getElementById('bepLoading').style.display = 'none';
-    document.getElementById('bepEmpty').style.display = 'block';
-    document.getElementById('bepErr').textContent = 'Ошибка соединения';
-    document.getElementById('bepErr').style.display = 'block';
-  }
-}
-
-function reloadBEP() {
-  document.getElementById('bepResults').style.display = 'none';
-  document.getElementById('bepEmpty').style.display = 'block';
-}
-
-function recalcBEP() {
-  if(!bepData) return;
-  var cogs = parseFloat(document.getElementById('cogsInput').value) || 0;
-  renderBEP(bepData, cogs);
-}
-
-function renderBEP(d, cogs) {
-  var fixedTotal    = d.avg_fixed + cogs;
-  var varTotal      = d.avg_variable;
-  var varRatio      = d.variable_ratio / 100;
-  var cmRatio       = 1 - varRatio;
-  var bep           = cmRatio > 0 ? Math.round(fixedTotal / cmRatio) : 0;
-  var safety        = Math.round(d.avg_revenue - bep);
-  var safetyPct     = d.avg_revenue > 0 ? Math.round(safety / d.avg_revenue * 100) : 0;
-
-  document.getElementById('bepMeta').textContent = 'Период: ' + d.period + ' · ' + d.n_months + ' мес.';
-  document.getElementById('bKpiRev').textContent    = fmt(d.avg_revenue) + ' ₸';
-  document.getElementById('bKpiFixed').textContent  = fmt(fixedTotal) + ' ₸';
-  document.getElementById('bKpiVar').textContent    = fmt(varTotal) + ' ₸';
-  document.getElementById('bKpiVarPct').textContent = d.variable_ratio + '% от выручки';
-  document.getElementById('bKpiBEP').textContent    = fmt(bep) + ' ₸';
-  var safeEl = document.getElementById('bKpiSafety');
-  safeEl.textContent  = (safety >= 0 ? '+' : '') + fmt(safety) + ' ₸';
-  safeEl.className    = 'kpi-val ' + (safety >= 0 ? 'g' : 'r');
-  document.getElementById('bKpiSafetyPct').textContent = 'запас: ' + safetyPct + '%';
-  document.getElementById('cmRatio').textContent = Math.round(cmRatio * 100) + '%';
-
-  // Fixed breakdown
-  document.getElementById('fixedBreakdown').innerHTML = Object.entries(d.fixed_breakdown).sort(function(a,b){return b[1]-a[1];}).map(function(e){
-    return '<div class="cat-row"><span class="cat-name" style="font-size:11px">'+e[0]+'</span><span class="cat-amt r" style="font-size:11px">'+fmt(e[1])+' ₸</span></div>';
-  }).join('') || '<div style="font-size:12px;color:var(--muted);padding:8px 0">Нет данных</div>';
-
-  // Variable breakdown
-  document.getElementById('varBreakdown').innerHTML = Object.entries(d.variable_breakdown).sort(function(a,b){return b[1]-a[1];}).map(function(e){
-    return '<div class="cat-row"><span class="cat-name" style="font-size:11px">'+e[0]+'</span><span class="cat-amt r" style="font-size:11px">'+fmt(e[1])+' ₸</span></div>';
-  }).join('') || '<div style="font-size:12px;color:var(--muted);padding:8px 0">Нет данных</div>';
-
-  // BEP Chart — waterfall style
-  if(bepChartInst) bepChartInst.destroy();
-  var labels = ['Выручка', 'Пост. затраты', 'Перем. затраты', 'Закуп/COGS', 'Прибыль'];
-  var profit = d.avg_revenue - fixedTotal - varTotal;
-  bepChartInst = new Chart(document.getElementById('bepChart').getContext('2d'), {
-    type: 'bar',
-    data: {
-      labels: ['Ср. выручка/мес', 'Пост. затраты', 'Перем. затраты', 'ТБУ (нужно)', 'Запас прочности'],
-      datasets: [{
-        data: [d.avg_revenue, fixedTotal, varTotal, bep, Math.max(0, safety)],
-        backgroundColor: ['rgba(39,174,96,.75)', 'rgba(231,76,60,.75)', 'rgba(231,76,60,.6)', 'rgba(212,160,23,.8)', safety>=0?'rgba(39,174,96,.5)':'rgba(231,76,60,.5)'],
-        borderRadius: 4,
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
-        y: { grid: { color: '#F3F4F6' }, ticks: { font: { size: 9 }, callback: function(v){ return v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?(v/1000).toFixed(0)+'K':v; } } }
-      }
-    }
-  });
-
-  // Monthly table
-  document.getElementById('bepMonthly').innerHTML = (d.monthly_table||[]).map(function(m){
-    var s = m.safety >= 0;
-    return '<tr>'+
-      '<td><strong>'+m.month+'</strong></td>'+
-      '<td class="g">'+fmt(m.revenue)+'</td>'+
-      '<td class="r">'+fmt(m.fixed)+'</td>'+
-      '<td class="r">'+fmt(m.variable)+'</td>'+
-      '<td style="font-weight:600">'+fmt(m.bep)+'</td>'+
-      '<td class="'+(s?'g':'r')+'">'+(s?'+':'')+fmt(m.safety)+'</td>'+
-      '<td><span style="background:'+(s?'#D1FAE5':'#FEE2E2')+';color:'+(s?'#15803D':'#DC2626')+';padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">'+(s?'✓ Достигнута':'✗ Не достигнута')+'</span></td>'+
-      '</tr>';
-  }).join('');
-}
-
-</script>
-</body>
-</html>
+
+def generate_recommendations(txns, inc, exp, net, cat_exp, monthly):
+    recs = []
+    savings_rate = (net / inc * 100) if inc > 0 else 0
+    if savings_rate < 10:
+        recs.append({"type":"danger","icon":"alert","title":"Низкая норма сбережений",
+            "text":f"Текущий уровень: {savings_rate:.1f}%. Рекомендуемый минимум — 20%. Проанализируйте топ расходных категорий."})
+    elif savings_rate >= 30:
+        recs.append({"type":"success","icon":"check","title":"Хорошая норма сбережений",
+            "text":f"Уровень сбережений {savings_rate:.1f}% — выше нормы. Рассмотрите инвестиционные инструменты."})
+    if net < 0:
+        recs.append({"type":"danger","icon":"alert","title":"Отрицательный денежный поток",
+            "text":f"Расходы превышают доходы на {abs(net):,.0f} ₸. Необходим срочный аудит бюджета."})
+    top_cat = max(cat_exp.items(), key=lambda x: x[1]) if cat_exp else None
+    if top_cat:
+        share = top_cat[1] / exp * 100 if exp > 0 else 0
+        if share > 30:
+            recs.append({"type":"warning","icon":"info","title":f"Концентрация расходов: «{top_cat[0]}»",
+                "text":f"{share:.1f}% всех расходов — одна категория ({top_cat[1]:,.0f} ₸). Диверсифицируйте бюджет."})
+    if len(monthly) >= 3:
+        cf = [m["income"]-m["expense"] for m in monthly[-3:]]
+        if all(cf[i] < cf[i-1] for i in range(1,3)):
+            recs.append({"type":"warning","icon":"trend","title":"Нисходящий тренд CF",
+                "text":"Чистый CF снижается 3 месяца подряд. Проверьте источники доходов."})
+        elif all(cf[i] > cf[i-1] for i in range(1,3)):
+            recs.append({"type":"success","icon":"trend","title":"Положительный тренд",
+                "text":"Денежный поток растёт 3 месяца подряд. Хороший момент для резервного фонда."})
+    tax = cat_exp.get("Налоги / взносы", 0)
+    if tax > 0:
+        recs.append({"type":"info","icon":"info","title":"Налоговая нагрузка",
+            "text":f"Уплачено налогов: {tax:,.0f} ₸ ({(tax/exp*100) if exp > 0 else 0:.1f}% расходов). Проверьте применение вычетов."})
+    if not recs:
+        recs.append({"type":"success","icon":"check","title":"Финансовые показатели в норме",
+            "text":"Структура доходов и расходов сбалансирована."})
+    return recs
+
+# ─── РОУТЫ ────────────────────────────────────────────────────────────────────
+
+@app.route("/")
+def index():
+    return send_file("index.html")
+
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.get_json()
+    if data.get("password") == ACCESS_PASSWORD:
+        session["auth"] = True
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "Неверный пароль"}), 401
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
+    return jsonify({"ok": True})
+
+def require_auth():
+    return session.get("auth") is True
+
+@app.route("/analyze", methods=["POST"])
+def analyze():
+    files = request.files.getlist("files")
+    mode  = request.form.get("mode", "append")  # append | replace
+
+    if not files:
+        return jsonify({"error": "Файлы не загружены"}), 400
+
+    upload_dir = "/tmp/busan_uploads"
+    os.makedirs(upload_dir, exist_ok=True)
+
+    new_transactions = []
+    file_results = []
+    for f in files:
+        path = os.path.join(upload_dir, f.filename)
+        f.save(path)
+        bank = detect_bank(f.filename, path)
+        txns = parse_file(path, bank)
+        new_transactions.extend(txns)
+        file_results.append({"name": f.filename, "bank": bank, "count": len(txns)})
+        os.remove(path)
+
+    if not new_transactions:
+        return jsonify({"error": "Транзакции не найдены. Проверьте формат файлов."}), 400
+
+    # Накопительная база
+    db = load_db()
+    if mode == "replace":
+        db["transactions"] = new_transactions
+        added = len(new_transactions)
+    else:
+        added = merge_transactions(db["transactions"], new_transactions)
+
+    db["updated_at"] = datetime.now().strftime("%d.%m.%Y %H:%M")
+    save_db(db)
+
+    all_transactions = db["transactions"]
+    analytics = build_analytics(all_transactions)
+    analytics["files"] = file_results
+    analytics["added"] = added
+    analytics["db_total"] = len(all_transactions)
+    analytics["db_updated"] = db["updated_at"]
+    analytics["mode"] = mode
+
+    # Для Excel
+    with open("/tmp/busan_txns.json", "w", encoding="utf-8") as f:
+        json.dump(all_transactions, f, ensure_ascii=False)
+
+    return jsonify(analytics)
+
+@app.route("/db-stats", methods=["GET"])
+def db_stats():
+    db = load_db()
+    txns = db["transactions"]
+    return jsonify({
+        "total": len(txns),
+        "updated_at": db.get("updated_at"),
+        "months": sorted(set(t["month"] for t in txns)),
+        "banks": list(set(t["bank"] for t in txns)),
+    })
+
+@app.route("/db-clear", methods=["POST"])
+def db_clear():
+    save_db({"transactions": [], "updated_at": None})
+    return jsonify({"ok": True})
+
+@app.route("/db-analyze", methods=["GET"])
+def db_analyze():
+    """Показать аналитику по всей накопленной базе без загрузки файлов"""
+    db = load_db()
+    if not db["transactions"]:
+        return jsonify({"error": "База данных пуста"}), 400
+    analytics = build_analytics(db["transactions"])
+    analytics["files"] = []
+    analytics["db_total"] = len(db["transactions"])
+    analytics["db_updated"] = db.get("updated_at")
+    with open("/tmp/busan_txns.json", "w", encoding="utf-8") as f:
+        json.dump(db["transactions"], f, ensure_ascii=False)
+    return jsonify(analytics)
+
+@app.route("/download-excel")
+def download_excel():
+    try:
+        with open("/tmp/busan_txns.json", "r", encoding="utf-8") as f:
+            txns = json.load(f)
+        buf = generate_excel(txns)
+        ts = datetime.now().strftime("%Y%m%d_%H%M")
+        return send_file(buf, as_attachment=True,
+                         download_name=f"BUSAN_Cashflow_{ts}.xlsx",
+                         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+def generate_excel(transactions):
+    wb = openpyxl.Workbook()
+    ws = wb.active; ws.title = "Дашборд"
+    ws.sheet_view.showGridLines = False
+    ws.merge_cells("A1:G1")
+    c = ws["A1"]; c.value = "BUSAN FINANCE  |  CASHFLOW ОТЧЁТ"
+    c.fill = fill(NAVY); c.font = Font(name="Arial", bold=True, color=GOLD, size=14)
+    c.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 35
+    ws.merge_cells("A2:G2")
+    c = ws["A2"]; c.value = f"Сформировано: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+    c.fill = fill(NAVY); c.font = font(color=GOLD, size=9, italic=True)
+    c.alignment = Alignment(horizontal="center")
+    total_inc = sum(t["credit"] for t in transactions)
+    total_exp = sum(t["debit"]  for t in transactions)
+    net = total_inc - total_exp
+    kpis = [("Доходы (₸)", f"{total_inc:,.0f}"), ("Расходы (₸)", f"{total_exp:,.0f}"),
+            ("Чистый CF (₸)", f"{net:+,.0f}"), ("Транзакций", str(len(transactions))),
+            ("Банков", str(len(set(t['bank'] for t in transactions))))]
+    for ci, (label, val) in enumerate(kpis, 1):
+        c = ws.cell(row=4, column=ci, value=label)
+        c.fill = fill(GOLD); c.font = font(bold=True, color=NAVY, size=9); c.alignment = Alignment(horizontal="center")
+        c = ws.cell(row=5, column=ci, value=val)
+        c.fill = fill(LIGHT); c.font = Font(name="Arial", bold=True, color=NAVY, size=12)
+        c.alignment = Alignment(horizontal="center")
+        ws.column_dimensions[get_column_letter(ci)].width = 20
+
+    # Транзакции
+    ws2 = wb.create_sheet("Транзакции")
+    ws2.sheet_view.showGridLines = False
+    for ci, h in enumerate(["Дата","Банк","Тип","Категория","Описание","Расход","Доход"], 1):
+        c = ws2.cell(row=1, column=ci, value=h)
+        c.fill = fill(NAVY); c.font = font(bold=True, color=GOLD, size=10)
+        c.alignment = Alignment(horizontal="center"); c.border = border_thin()
+    ws2.column_dimensions["A"].width=12; ws2.column_dimensions["B"].width=12
+    ws2.column_dimensions["C"].width=10; ws2.column_dimensions["D"].width=22
+    ws2.column_dimensions["E"].width=45; ws2.column_dimensions["F"].width=16; ws2.column_dimensions["G"].width=16
+    for ri, t in enumerate(sorted(transactions, key=lambda x: x["date"], reverse=True), 2):
+        bg = LIGHT if ri%2==0 else WHITE
+        for ci, v in enumerate([t["date"],t["bank"],"Расход" if t["type"]=="expense" else "Доход",
+                                  t["category"],t["description"][:80],
+                                  t["debit"] if t["debit"]>0 else "",
+                                  t["credit"] if t["credit"]>0 else ""], 1):
+            c = ws2.cell(row=ri, column=ci, value=v)
+            c.fill = fill(bg); c.border = border_thin()
+            if ci==3: c.font = font(color=RED if v=="Расход" else GREEN, size=9, bold=True)
+            elif ci in [6,7]: c.font = font(color=RED if ci==6 else GREEN, size=9); c.number_format="#,##0"
+            else: c.font = font(color=NAVY, size=9)
+    ws2.auto_filter.ref = f"A1:G{len(transactions)+1}"; ws2.freeze_panes = "A2"
+
+    # Категории по месяцам
+    ws4 = wb.create_sheet("Расходы по месяцам")
+    ws4.sheet_view.showGridLines = False
+    months = sorted(set(t["month"] for t in transactions))
+    cat_monthly = defaultdict(lambda: defaultdict(float))
+    for t in transactions:
+        if t["type"] == "expense": cat_monthly[t["category"]][t["month"]] += t["debit"]
+    hdrs = ["Категория"] + months + ["ИТОГО", "Уд. вес %"]
+    for ci, h in enumerate(hdrs, 1):
+        c = ws4.cell(row=1, column=ci, value=h)
+        c.fill = fill(NAVY); c.font = font(bold=True, color=GOLD, size=9)
+        c.alignment = Alignment(horizontal="center", wrap_text=True); c.border = border_thin()
+        ws4.column_dimensions[get_column_letter(ci)].width = 14
+    ws4.column_dimensions["A"].width = 28; ws4.row_dimensions[1].height = 30
+    cats_sorted = sorted(cat_monthly.keys(), key=lambda c: -sum(cat_monthly[c].values()))
+    grand_total = sum(sum(cat_monthly[c].values()) for c in cats_sorted)
+    for ri, cat in enumerate(cats_sorted, 2):
+        bg = LIGHT if ri%2==0 else WHITE
+        total = sum(cat_monthly[cat].values())
+        share = round(total/grand_total*100, 1) if grand_total > 0 else 0
+        row_vals = [cat] + [clean(cat_monthly[cat].get(m,0)) for m in months] + [clean(total), share]
+        for ci, v in enumerate(row_vals, 1):
+            c = ws4.cell(row=ri, column=ci, value=v if v != 0 else "")
+            c.fill = fill(bg); c.border = border_thin()
+            if ci == 1: c.font = font(color=NAVY, size=9, bold=True)
+            elif ci == len(hdrs): c.font = font(color=NAVY, size=9)
+            else: c.font = font(color=RED, size=9); c.number_format = "#,##0"
+    ws4.freeze_panes = "B2"
+
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return buf
+
+
+
+# ─── ТОЧКА БЕЗУБЫТОЧНОСТИ ─────────────────────────────────────────────────────
+
+@app.route("/bep-data", methods=["GET"])
+def bep_data():
+    """Возвращает данные для расчёта точки безубыточности из накопленной базы"""
+    db = load_db()
+    txns = db["transactions"]
+    if not txns:
+        return jsonify({"error": "База данных пуста. Сначала загрузите выписки в разделе Cashflow."}), 400
+
+    from collections import defaultdict
+
+    # Категории по типам для ТБУ
+    REVENUE_CATS   = {"Выручка Kaspi.kz", "Выручка по карточкам", "Торговая выручка", "Доход от клиентов"}
+    FIXED_CATS     = {"Аренда", "Зарплата / ФОТ", "Связь / интернет", "IT / сервисы", "Банковские расходы", "Профессиональные услуги", "Образование"}
+    VARIABLE_CATS  = {"Процессинг / эквайринг", "Реклама / маркетинг", "Логистика / курьер", "Возврат покупателю", "Транспорт"}
+
+    # Агрегация по месяцам
+    monthly = defaultdict(lambda: {"revenue":0,"fixed":0,"variable":0,"other_exp":0})
+    cat_totals = defaultdict(float)
+
+    for t in txns:
+        if t.get("internal"): continue
+        cat = t.get("category","Прочие")
+        month = t.get("month","")
+
+        if t["type"] == "income" and cat in REVENUE_CATS:
+            monthly[month]["revenue"] += t["credit"]
+            cat_totals["revenue_" + cat] += t["credit"]
+        elif t["type"] == "expense" and cat not in REVENUE_CATS:
+            if cat in FIXED_CATS:
+                monthly[month]["fixed"] += t["debit"]
+                cat_totals["fixed_" + cat] += t["debit"]
+            elif cat in VARIABLE_CATS:
+                monthly[month]["variable"] += t["debit"]
+                cat_totals["variable_" + cat] += t["debit"]
+            else:
+                monthly[month]["other_exp"] += t["debit"]
+
+    months_sorted = sorted(monthly.keys())
+
+    # Итого за весь период
+    total_revenue  = sum(monthly[m]["revenue"]  for m in months_sorted)
+    total_fixed    = sum(monthly[m]["fixed"]    for m in months_sorted)
+    total_variable = sum(monthly[m]["variable"] for m in months_sorted)
+    total_other    = sum(monthly[m]["other_exp"]for m in months_sorted)
+    n_months = max(len(months_sorted), 1)
+
+    avg_revenue  = total_revenue / n_months
+    avg_fixed    = total_fixed   / n_months
+    avg_variable = total_variable/ n_months
+
+    # Коэффициент переменных затрат (доля от выручки)
+    variable_ratio = total_variable / total_revenue if total_revenue > 0 else 0
+
+    # Маржинальный доход на единицу выручки
+    contribution_margin_ratio = 1 - variable_ratio
+
+    # ТБУ в деньгах = Постоянные / Маржинальный коэффициент
+    bep_revenue = avg_fixed / contribution_margin_ratio if contribution_margin_ratio > 0 else 0
+
+    # Запас прочности
+    safety_margin = avg_revenue - bep_revenue
+    safety_pct    = round(safety_margin / avg_revenue * 100, 1) if avg_revenue > 0 else 0
+
+    # Разбивка по категориям
+    fixed_breakdown    = {k.replace("fixed_",""):    round(v/n_months, 0) for k,v in cat_totals.items() if k.startswith("fixed_")}
+    variable_breakdown = {k.replace("variable_",""):  round(v/n_months, 0) for k,v in cat_totals.items() if k.startswith("variable_")}
+    revenue_breakdown  = {k.replace("revenue_",""):   round(v/n_months, 0) for k,v in cat_totals.items() if k.startswith("revenue_")}
+
+    # Помесячная динамика
+    monthly_table = []
+    for m in months_sorted:
+        rev = monthly[m]["revenue"]
+        fix = monthly[m]["fixed"]
+        var = monthly[m]["variable"]
+        vr  = var / rev if rev > 0 else variable_ratio
+        bep = fix / (1 - vr) if (1 - vr) > 0 else 0
+        monthly_table.append({
+            "month":    m,
+            "revenue":  round(rev, 0),
+            "fixed":    round(fix, 0),
+            "variable": round(var, 0),
+            "bep":      round(bep, 0),
+            "safety":   round(rev - bep, 0),
+            "achieved": rev >= bep,
+        })
+
+    return jsonify({
+        "period": months_sorted[0] + " — " + months_sorted[-1] if months_sorted else "—",
+        "n_months": n_months,
+        "avg_revenue":  round(avg_revenue,  0),
+        "avg_fixed":    round(avg_fixed,    0),
+        "avg_variable": round(avg_variable, 0),
+        "variable_ratio": round(variable_ratio * 100, 1),
+        "contribution_margin_ratio": round(contribution_margin_ratio * 100, 1),
+        "bep_revenue":   round(bep_revenue,  0),
+        "safety_margin": round(safety_margin, 0),
+        "safety_pct":    safety_pct,
+        "fixed_breakdown":    fixed_breakdown,
+        "variable_breakdown": variable_breakdown,
+        "revenue_breakdown":  revenue_breakdown,
+        "total_other_exp":    round(total_other / n_months, 0),
+        "monthly_table": monthly_table,
+    })
+
+
+# ─── СКЛАД ────────────────────────────────────────────────────────────────────
+
+from stock import parse_stock_report, build_stock_analytics
+
+@app.route("/stock-analyze", methods=["POST"])
+def stock_analyze():
+    files = request.files.getlist("files")
+    if not files:
+        return jsonify({"error": "Файл не загружен"}), 400
+
+    upload_dir = "/tmp/busan_uploads"
+    os.makedirs(upload_dir, exist_ok=True)
+
+    all_items = []
+    file_results = []
+    for f in files:
+        path = os.path.join(upload_dir, f.filename)
+        f.save(path)
+        items = parse_stock_report(path)
+        all_items.extend(items)
+        file_results.append({"name": f.filename, "count": len(items)})
+        os.remove(path)
+
+    if not all_items:
+        return jsonify({"error": "Товары не найдены. Проверьте формат файла."}), 400
+
+    analytics = build_stock_analytics(all_items)
+    analytics["files"] = file_results
+
+    with open("/tmp/busan_stock.json", "w", encoding="utf-8") as f:
+        json.dump(all_items, f, ensure_ascii=False, default=str)
+
+    return jsonify(analytics)
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=False)
