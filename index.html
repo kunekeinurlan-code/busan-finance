@@ -117,6 +117,149 @@ function renderBEP(d, cogs) {
   }).join('');
 }
 
+
+// ─── FINANCIAL PLAN ────────────────────────────────────────────────────────────
+var planYear = new Date().getFullYear();
+var planData = null;
+var currentEditMonth = null;
+
+var MONTH_NAMES = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+
+function changePlanYear(delta) {
+  planYear += delta;
+  loadPlan();
+}
+
+async function loadPlan() {
+  document.getElementById('planYearLabel').textContent = planYear;
+  document.getElementById('planLoading').style.display = 'block';
+  document.getElementById('monthGrid').style.display = 'none';
+
+  try {
+    var r = await fetch('/plan-data?year=' + planYear);
+    var d = await r.json();
+    planData = d;
+    renderPlanGrid(d);
+    document.getElementById('planLoading').style.display = 'none';
+    document.getElementById('monthGrid').style.display = 'grid';
+  } catch(e) {
+    document.getElementById('planLoading').style.display = 'none';
+  }
+}
+
+function renderPlanGrid(d) {
+  var now = new Date();
+  var curMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+
+  document.getElementById('monthGrid').innerHTML = (d.months||[]).map(function(m) {
+    var isCurrent = m.month === curMonth;
+    var isPast = m.month < curMonth;
+    var hasFact = m.has_fact;
+
+    var revenue = hasFact ? m.fact_revenue : m.plan_revenue;
+    var fixed   = hasFact ? m.fact_fixed   : m.plan_fixed;
+    var cogs    = m.plan_cogs || 0;
+    var variable= m.plan_variable || 0;
+
+    var totalExpense = hasFact ? m.fact_expense : (fixed + cogs + variable);
+    var result = revenue - totalExpense;
+
+    var eventsTotal = (m.events||[]).reduce(function(s,e){ return s + (e.type==='expense' ? -e.amount : e.amount); }, 0);
+    var finalResult = result + eventsTotal;
+
+    var statusBadge = hasFact ? '<span class="month-card-status fact">Факт</span>' : '<span class="month-card-status future">План</span>';
+
+    var eventsHtml = (m.events||[]).length ? '<div class="mc-events">' + m.events.map(function(e) {
+      var sign = e.type === 'expense' ? '-' : '+';
+      var color = e.type === 'expense' ? 'var(--red)' : 'var(--green)';
+      return '<div class="mc-event"><span>📌 ' + e.title + '</span><span class="mc-event-amt" style="color:'+color+'">' + sign + fmt(e.amount) + '</span></div>';
+    }).join('') + '</div>' : '';
+
+    return '<div class="month-card' + (isCurrent ? ' current' : '') + '">' +
+      '<div class="month-card-hdr"><span class="month-card-name">' + MONTH_NAMES[m.month_num-1] + '</span>' + statusBadge + '</div>' +
+      '<div class="month-card-body">' +
+        '<div class="mc-row"><span class="mc-lbl">' + (hasFact?'Факт выручка':'План выручка') + '</span><span class="mc-val" style="color:var(--green)">' + fmt(revenue) + ' ₸</span></div>' +
+        '<div class="mc-row"><span class="mc-lbl">Постоянные</span><span class="mc-val" style="color:var(--red)">' + fmt(fixed) + ' ₸</span></div>' +
+        (cogs > 0 ? '<div class="mc-row"><span class="mc-lbl">Закуп/COGS</span><span class="mc-val" style="color:var(--red)">' + fmt(cogs) + ' ₸</span></div>' : '') +
+        (variable > 0 ? '<div class="mc-row"><span class="mc-lbl">Переменные</span><span class="mc-val" style="color:var(--red)">' + fmt(variable) + ' ₸</span></div>' : '') +
+        eventsHtml +
+        '<div class="mc-divider"></div>' +
+        '<div class="mc-result"><span>Результат</span><span style="color:' + (finalResult>=0?'var(--green)':'var(--red)') + '">' + (finalResult>=0?'+':'') + fmt(finalResult) + ' ₸</span></div>' +
+        '<button class="mc-edit-btn" onclick="openPlanModal(\'' + m.month + '\')">✏️ Редактировать план</button>' +
+      '</div></div>';
+  }).join('');
+}
+
+function openPlanModal(month) {
+  currentEditMonth = month;
+  var m = planData.months.find(function(x){ return x.month === month; });
+  if(!m) return;
+
+  var mNum = parseInt(month.split('-')[1]);
+  document.getElementById('planModalTitle').textContent = MONTH_NAMES[mNum-1] + ' ' + planYear;
+  document.getElementById('mPlanRevenue').value  = m.plan_revenue || '';
+  document.getElementById('mPlanFixed').value    = m.plan_fixed || '';
+  document.getElementById('mPlanCogs').value     = m.plan_cogs || '';
+  document.getElementById('mPlanVariable').value = m.plan_variable || '';
+
+  renderEventListModal(m.events || []);
+
+  document.getElementById('planModal').classList.add('show');
+}
+
+function renderEventListModal(events) {
+  document.getElementById('eventListModal').innerHTML = events.length ? events.map(function(e) {
+    var sign = e.type === 'expense' ? '−' : '+';
+    var color = e.type === 'expense' ? 'var(--red)' : 'var(--green)';
+    return '<div class="event-item-modal"><span>📌 ' + e.title + ' <strong style="color:'+color+'">' + sign + fmt(e.amount) + ' ₸</strong></span>' +
+      '<span class="event-del" onclick="deletePlanEvent(\'' + e.id + '\')">✕</span></div>';
+  }).join('') : '<div style="font-size:11px;color:var(--muted);padding:6px 0">Нет мероприятий</div>';
+}
+
+function closePlanModal() {
+  document.getElementById('planModal').classList.remove('show');
+  currentEditMonth = null;
+}
+
+async function savePlanMonth() {
+  if(!currentEditMonth) return;
+  var payload = {
+    month: currentEditMonth,
+    plan_revenue:  document.getElementById('mPlanRevenue').value,
+    plan_fixed:    document.getElementById('mPlanFixed').value,
+    plan_cogs:     document.getElementById('mPlanCogs').value,
+    plan_variable: document.getElementById('mPlanVariable').value,
+  };
+  await fetch('/plan-save-month', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+  closePlanModal();
+  loadPlan();
+}
+
+async function addPlanEvent() {
+  if(!currentEditMonth) return;
+  var title  = document.getElementById('newEventTitle').value.trim();
+  var amount = parseFloat(document.getElementById('newEventAmount').value) || 0;
+  var type   = document.getElementById('newEventType').value;
+  if(!title || amount === 0) { alert('Укажите название и сумму'); return; }
+
+  var r = await fetch('/plan-add-event', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({month: currentEditMonth, title: title, amount: amount, type: type})});
+  var d = await r.json();
+
+  document.getElementById('newEventTitle').value = '';
+  document.getElementById('newEventAmount').value = '';
+
+  // Update local data
+  var m = planData.months.find(function(x){ return x.month === currentEditMonth; });
+  if(m) { m.events = m.events || []; m.events.push(d.event); renderEventListModal(m.events); }
+}
+
+async function deletePlanEvent(id) {
+  await fetch('/plan-delete-event', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id:id})});
+  var m = planData.months.find(function(x){ return x.month === currentEditMonth; });
+  if(m) { m.events = (m.events||[]).filter(function(e){ return e.id !== id; }); renderEventListModal(m.events); }
+}
+
 </script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -133,6 +276,50 @@ header{background:var(--navy);height:56px;display:flex;align-items:center;justif
 .badge{font-size:10px;color:var(--gold);border:1px solid rgba(212,160,23,.4);padding:3px 10px;border-radius:12px}
 .btn-logout{background:transparent;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer;display:none}
 .btn-logout:hover{color:#fff}
+
+
+/* PLAN PAGE */
+.plan-year-nav{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.plan-year-btn{background:var(--white);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:14px;font-weight:700;cursor:pointer;color:var(--navy)}
+.plan-year-btn:hover{border-color:var(--gold)}
+.plan-year-label{font-size:18px;font-weight:800;color:var(--navy);min-width:60px;text-align:center}
+.month-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.month-card{background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:box-shadow .15s}
+.month-card:hover{box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.month-card.current{border-color:var(--gold);border-width:2px}
+.month-card-hdr{background:var(--navy);color:#fff;padding:10px 14px;display:flex;align-items:center;justify-content:space-between}
+.month-card-name{font-size:13px;font-weight:700}
+.month-card-status{font-size:9px;padding:2px 8px;border-radius:8px;font-weight:700;text-transform:uppercase}
+.month-card-status.future{background:rgba(255,255,255,.15);color:rgba(255,255,255,.7)}
+.month-card-status.fact{background:rgba(39,174,96,.25);color:#6EE7A8}
+.month-card-body{padding:14px}
+.mc-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:12px}
+.mc-row .mc-lbl{color:var(--muted)}
+.mc-row .mc-val{font-weight:700}
+.mc-divider{height:1px;background:var(--border);margin:8px 0}
+.mc-result{display:flex;justify-content:space-between;align-items:center;padding-top:8px;font-size:13px;font-weight:800}
+.mc-edit-btn{width:100%;margin-top:10px;background:var(--surf);border:1px solid var(--border);border-radius:7px;padding:7px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer}
+.mc-edit-btn:hover{border-color:var(--navy);color:var(--navy)}
+.mc-events{margin-top:8px}
+.mc-event{display:flex;justify-content:space-between;align-items:center;font-size:10px;padding:3px 0;color:var(--muted)}
+.mc-event-amt{font-weight:700}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.show{display:flex}
+.modal-box{background:#fff;border-radius:14px;padding:24px;width:100%;max-width:420px;max-height:85vh;overflow-y:auto}
+.modal-title{font-size:16px;font-weight:800;color:var(--navy);margin-bottom:16px}
+.modal-field{margin-bottom:14px}
+.modal-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-bottom:5px;display:block}
+.modal-input{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:13px;outline:none}
+.modal-input:focus{border-color:var(--gold)}
+.modal-btns{display:flex;gap:8px;margin-top:18px}
+.modal-btn{flex:1;padding:10px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;border:none}
+.modal-btn.save{background:var(--navy);color:var(--gold)}
+.modal-btn.cancel{background:var(--surf);color:var(--muted);border:1px solid var(--border)!important}
+.event-list-modal{max-height:150px;overflow-y:auto;margin-bottom:10px}
+.event-item-modal{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:var(--surf);border-radius:6px;margin-bottom:4px;font-size:11px}
+.event-del{color:var(--red);cursor:pointer;font-size:14px}
 
 /* LOGIN */
 #loginSection{display:none;align-items:center;justify-content:center;min-height:calc(100vh - 56px);padding:20px}
@@ -333,6 +520,9 @@ footer{text-align:center;padding:18px;font-size:11px;color:var(--muted);border-t
       </button>
       <button class="nav-item" id="nav-bep" onclick="showPage('bep')">
         <span>📐</span> Точка БУ
+      </button>
+      <button class="nav-item" id="nav-plan" onclick="showPage('plan')">
+        <span>📅</span> Финплан
       </button>
     </div>
   </nav>
@@ -585,6 +775,73 @@ footer{text-align:center;padding:18px;font-size:11px;color:var(--muted);border-t
       </div>
     </div><!-- /bep page -->
 
+
+    <!-- ══ PLAN PAGE ══ -->
+    <div id="page-plan" class="page">
+
+      <div class="plan-year-nav">
+        <button class="plan-year-btn" onclick="changePlanYear(-1)">←</button>
+        <div class="plan-year-label" id="planYearLabel">2026</div>
+        <button class="plan-year-btn" onclick="changePlanYear(1)">→</button>
+        <div style="flex:1"></div>
+        <div style="font-size:11px;color:var(--muted)">
+          💡 Постоянные затраты подтягиваются автоматически из истории Cashflow
+        </div>
+      </div>
+
+      <div class="loading-wrap" id="planLoading" style="display:block">
+        <div class="spinner"></div><p style="color:var(--muted);font-size:13px">Загружаем план...</p>
+      </div>
+
+      <div class="month-grid" id="monthGrid" style="display:none"></div>
+
+    </div><!-- /plan page -->
+
+    <!-- EDIT MONTH MODAL -->
+    <div class="modal-overlay" id="planModal">
+      <div class="modal-box">
+        <div class="modal-title" id="planModalTitle">Январь 2026</div>
+
+        <div class="modal-field">
+          <label class="modal-label">План выручки (₸)</label>
+          <input type="number" class="modal-input" id="mPlanRevenue" placeholder="0">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Постоянные затраты (₸)</label>
+          <input type="number" class="modal-input" id="mPlanFixed" placeholder="0">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Себестоимость / закуп (₸)</label>
+          <input type="number" class="modal-input" id="mPlanCogs" placeholder="0">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Переменные затраты (₸)</label>
+          <input type="number" class="modal-input" id="mPlanVariable" placeholder="0">
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-label">Мероприятия / разовые платежи</label>
+          <div class="event-list-modal" id="eventListModal"></div>
+          <div style="display:flex;gap:6px">
+            <input type="text" class="modal-input" id="newEventTitle" placeholder="Название" style="flex:2">
+            <input type="number" class="modal-input" id="newEventAmount" placeholder="₸" style="flex:1">
+          </div>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <select class="modal-input" id="newEventType" style="flex:1">
+              <option value="expense">Расход</option>
+              <option value="income">Доход</option>
+            </select>
+            <button class="modal-btn save" style="flex:1;padding:8px;font-size:11px" onclick="addPlanEvent()">+ Добавить</button>
+          </div>
+        </div>
+
+        <div class="modal-btns">
+          <button class="modal-btn cancel" onclick="closePlanModal()">Отмена</button>
+          <button class="modal-btn save" onclick="savePlanMonth()">Сохранить</button>
+        </div>
+      </div>
+    </div>
+
   </div><!-- /page-content -->
 </div><!-- /app-layout -->
 </div><!-- /appSection -->
@@ -654,6 +911,7 @@ function showPage(page) {
   document.getElementById('page-' + page).classList.add('active');
   document.getElementById('nav-' + page).classList.add('active');
   if(page === 'bep') loadBEP();
+  if(page === 'plan') loadPlan();
 }
 
 // ─── DB STATS ────────────────────────────────────────────────────────────────
@@ -1085,6 +1343,149 @@ function renderBEP(d, cogs) {
       '<td><span style="background:'+(s?'#D1FAE5':'#FEE2E2')+';color:'+(s?'#15803D':'#DC2626')+';padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">'+(s?'✓ Достигнута':'✗ Не достигнута')+'</span></td>'+
       '</tr>';
   }).join('');
+}
+
+
+// ─── FINANCIAL PLAN ────────────────────────────────────────────────────────────
+var planYear = new Date().getFullYear();
+var planData = null;
+var currentEditMonth = null;
+
+var MONTH_NAMES = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+
+function changePlanYear(delta) {
+  planYear += delta;
+  loadPlan();
+}
+
+async function loadPlan() {
+  document.getElementById('planYearLabel').textContent = planYear;
+  document.getElementById('planLoading').style.display = 'block';
+  document.getElementById('monthGrid').style.display = 'none';
+
+  try {
+    var r = await fetch('/plan-data?year=' + planYear);
+    var d = await r.json();
+    planData = d;
+    renderPlanGrid(d);
+    document.getElementById('planLoading').style.display = 'none';
+    document.getElementById('monthGrid').style.display = 'grid';
+  } catch(e) {
+    document.getElementById('planLoading').style.display = 'none';
+  }
+}
+
+function renderPlanGrid(d) {
+  var now = new Date();
+  var curMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+
+  document.getElementById('monthGrid').innerHTML = (d.months||[]).map(function(m) {
+    var isCurrent = m.month === curMonth;
+    var isPast = m.month < curMonth;
+    var hasFact = m.has_fact;
+
+    var revenue = hasFact ? m.fact_revenue : m.plan_revenue;
+    var fixed   = hasFact ? m.fact_fixed   : m.plan_fixed;
+    var cogs    = m.plan_cogs || 0;
+    var variable= m.plan_variable || 0;
+
+    var totalExpense = hasFact ? m.fact_expense : (fixed + cogs + variable);
+    var result = revenue - totalExpense;
+
+    var eventsTotal = (m.events||[]).reduce(function(s,e){ return s + (e.type==='expense' ? -e.amount : e.amount); }, 0);
+    var finalResult = result + eventsTotal;
+
+    var statusBadge = hasFact ? '<span class="month-card-status fact">Факт</span>' : '<span class="month-card-status future">План</span>';
+
+    var eventsHtml = (m.events||[]).length ? '<div class="mc-events">' + m.events.map(function(e) {
+      var sign = e.type === 'expense' ? '-' : '+';
+      var color = e.type === 'expense' ? 'var(--red)' : 'var(--green)';
+      return '<div class="mc-event"><span>📌 ' + e.title + '</span><span class="mc-event-amt" style="color:'+color+'">' + sign + fmt(e.amount) + '</span></div>';
+    }).join('') + '</div>' : '';
+
+    return '<div class="month-card' + (isCurrent ? ' current' : '') + '">' +
+      '<div class="month-card-hdr"><span class="month-card-name">' + MONTH_NAMES[m.month_num-1] + '</span>' + statusBadge + '</div>' +
+      '<div class="month-card-body">' +
+        '<div class="mc-row"><span class="mc-lbl">' + (hasFact?'Факт выручка':'План выручка') + '</span><span class="mc-val" style="color:var(--green)">' + fmt(revenue) + ' ₸</span></div>' +
+        '<div class="mc-row"><span class="mc-lbl">Постоянные</span><span class="mc-val" style="color:var(--red)">' + fmt(fixed) + ' ₸</span></div>' +
+        (cogs > 0 ? '<div class="mc-row"><span class="mc-lbl">Закуп/COGS</span><span class="mc-val" style="color:var(--red)">' + fmt(cogs) + ' ₸</span></div>' : '') +
+        (variable > 0 ? '<div class="mc-row"><span class="mc-lbl">Переменные</span><span class="mc-val" style="color:var(--red)">' + fmt(variable) + ' ₸</span></div>' : '') +
+        eventsHtml +
+        '<div class="mc-divider"></div>' +
+        '<div class="mc-result"><span>Результат</span><span style="color:' + (finalResult>=0?'var(--green)':'var(--red)') + '">' + (finalResult>=0?'+':'') + fmt(finalResult) + ' ₸</span></div>' +
+        '<button class="mc-edit-btn" onclick="openPlanModal(\'' + m.month + '\')">✏️ Редактировать план</button>' +
+      '</div></div>';
+  }).join('');
+}
+
+function openPlanModal(month) {
+  currentEditMonth = month;
+  var m = planData.months.find(function(x){ return x.month === month; });
+  if(!m) return;
+
+  var mNum = parseInt(month.split('-')[1]);
+  document.getElementById('planModalTitle').textContent = MONTH_NAMES[mNum-1] + ' ' + planYear;
+  document.getElementById('mPlanRevenue').value  = m.plan_revenue || '';
+  document.getElementById('mPlanFixed').value    = m.plan_fixed || '';
+  document.getElementById('mPlanCogs').value     = m.plan_cogs || '';
+  document.getElementById('mPlanVariable').value = m.plan_variable || '';
+
+  renderEventListModal(m.events || []);
+
+  document.getElementById('planModal').classList.add('show');
+}
+
+function renderEventListModal(events) {
+  document.getElementById('eventListModal').innerHTML = events.length ? events.map(function(e) {
+    var sign = e.type === 'expense' ? '−' : '+';
+    var color = e.type === 'expense' ? 'var(--red)' : 'var(--green)';
+    return '<div class="event-item-modal"><span>📌 ' + e.title + ' <strong style="color:'+color+'">' + sign + fmt(e.amount) + ' ₸</strong></span>' +
+      '<span class="event-del" onclick="deletePlanEvent(\'' + e.id + '\')">✕</span></div>';
+  }).join('') : '<div style="font-size:11px;color:var(--muted);padding:6px 0">Нет мероприятий</div>';
+}
+
+function closePlanModal() {
+  document.getElementById('planModal').classList.remove('show');
+  currentEditMonth = null;
+}
+
+async function savePlanMonth() {
+  if(!currentEditMonth) return;
+  var payload = {
+    month: currentEditMonth,
+    plan_revenue:  document.getElementById('mPlanRevenue').value,
+    plan_fixed:    document.getElementById('mPlanFixed').value,
+    plan_cogs:     document.getElementById('mPlanCogs').value,
+    plan_variable: document.getElementById('mPlanVariable').value,
+  };
+  await fetch('/plan-save-month', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+  closePlanModal();
+  loadPlan();
+}
+
+async function addPlanEvent() {
+  if(!currentEditMonth) return;
+  var title  = document.getElementById('newEventTitle').value.trim();
+  var amount = parseFloat(document.getElementById('newEventAmount').value) || 0;
+  var type   = document.getElementById('newEventType').value;
+  if(!title || amount === 0) { alert('Укажите название и сумму'); return; }
+
+  var r = await fetch('/plan-add-event', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({month: currentEditMonth, title: title, amount: amount, type: type})});
+  var d = await r.json();
+
+  document.getElementById('newEventTitle').value = '';
+  document.getElementById('newEventAmount').value = '';
+
+  // Update local data
+  var m = planData.months.find(function(x){ return x.month === currentEditMonth; });
+  if(m) { m.events = m.events || []; m.events.push(d.event); renderEventListModal(m.events); }
+}
+
+async function deletePlanEvent(id) {
+  await fetch('/plan-delete-event', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id:id})});
+  var m = planData.months.find(function(x){ return x.month === currentEditMonth; });
+  if(m) { m.events = (m.events||[]).filter(function(e){ return e.id !== id; }); renderEventListModal(m.events); }
 }
 
 </script>
