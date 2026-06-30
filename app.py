@@ -848,6 +848,136 @@ def bep_data():
     })
 
 
+
+# ─── ФИНАНСОВЫЙ ПЛАН ──────────────────────────────────────────────────────────
+
+PLAN_DB_PATH = "/tmp/busan_plan.json"
+
+def load_plan():
+    try:
+        if os.path.exists(PLAN_DB_PATH):
+            with open(PLAN_DB_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except: pass
+    return {"months": {}, "events": []}
+
+def save_plan(data):
+    with open(PLAN_DB_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
+
+@app.route("/plan-data", methods=["GET"])
+def plan_data():
+    """Возвращает годовой финплан с автоподтяжкой факта из cashflow и постоянных затрат из BEP"""
+    year = request.args.get("year", str(datetime.now().year))
+    plan = load_plan()
+
+    # Факт из накопленной базы cashflow
+    db = load_db()
+    txns = db["transactions"]
+
+    from collections import defaultdict
+    REVENUE_CATS = {"Выручка Kaspi.kz", "Выручка по карточкам", "Торговая выручка", "Доход от клиентов"}
+    FIXED_CATS   = {"Аренда", "Зарплата / ФОТ", "Связь / интернет", "IT / сервисы", "Банковские расходы", "Профессиональные услуги", "Образование"}
+
+    fact_by_month = defaultdict(lambda: {"revenue":0, "fixed":0, "expense":0})
+    fixed_avg_by_cat = defaultdict(float)
+    months_count = set()
+
+    for t in txns:
+        if t.get("internal"): continue
+        m = t.get("month", "")
+        if not m.startswith(year): continue
+        months_count.add(m)
+        if t["type"] == "income" and t["category"] in REVENUE_CATS:
+            fact_by_month[m]["revenue"] += t["credit"]
+        elif t["type"] == "expense":
+            fact_by_month[m]["expense"] += t["debit"]
+            if t["category"] in FIXED_CATS:
+                fact_by_month[m]["fixed"] += t["debit"]
+                fixed_avg_by_cat[t["category"]] += t["debit"]
+
+    n_months = max(len(months_count), 1)
+    avg_fixed_breakdown = {k: round(v/n_months, 0) for k, v in fixed_avg_by_cat.items()}
+    avg_fixed_total = sum(avg_fixed_breakdown.values())
+
+    # Собираем 12 месяцев
+    months_list = []
+    for mi in range(1, 13):
+        mkey = f"{year}-{mi:02d}"
+        plan_month = plan["months"].get(mkey, {})
+        fact = fact_by_month.get(mkey, {"revenue":0,"fixed":0,"expense":0})
+
+        events = [e for e in plan.get("events", []) if e.get("month") == mkey]
+
+        months_list.append({
+            "month": mkey,
+            "month_num": mi,
+            "plan_revenue":  plan_month.get("plan_revenue", 0),
+            "plan_fixed":    plan_month.get("plan_fixed", round(avg_fixed_total)),
+            "plan_variable": plan_month.get("plan_variable", 0),
+            "plan_cogs":     plan_month.get("plan_cogs", 0),
+            "fact_revenue":  round(fact["revenue"]),
+            "fact_fixed":    round(fact["fixed"]),
+            "fact_expense":  round(fact["expense"]),
+            "has_fact":      mkey in fact_by_month,
+            "events": events,
+        })
+
+    return jsonify({
+        "year": year,
+        "months": months_list,
+        "avg_fixed_breakdown": avg_fixed_breakdown,
+        "avg_fixed_total": round(avg_fixed_total),
+    })
+
+
+@app.route("/plan-save-month", methods=["POST"])
+def plan_save_month():
+    """Сохраняет план на конкретный месяц"""
+    data = request.get_json()
+    month = data.get("month")
+    if not month:
+        return jsonify({"error": "Не указан месяц"}), 400
+
+    plan = load_plan()
+    plan["months"][month] = {
+        "plan_revenue":  float(data.get("plan_revenue", 0) or 0),
+        "plan_fixed":    float(data.get("plan_fixed", 0) or 0),
+        "plan_variable": float(data.get("plan_variable", 0) or 0),
+        "plan_cogs":     float(data.get("plan_cogs", 0) or 0),
+    }
+    save_plan(plan)
+    return jsonify({"ok": True})
+
+
+@app.route("/plan-add-event", methods=["POST"])
+def plan_add_event():
+    """Добавляет разовое мероприятие/событие в план"""
+    data = request.get_json()
+    plan = load_plan()
+    event = {
+        "id": str(len(plan.get("events", [])) + 1) + "_" + str(int(datetime.now().timestamp())),
+        "month": data.get("month"),
+        "title": data.get("title", ""),
+        "amount": float(data.get("amount", 0) or 0),
+        "type": data.get("type", "expense"),  # expense | income
+        "date": data.get("date", ""),
+    }
+    plan.setdefault("events", []).append(event)
+    save_plan(plan)
+    return jsonify({"ok": True, "event": event})
+
+
+@app.route("/plan-delete-event", methods=["POST"])
+def plan_delete_event():
+    data = request.get_json()
+    eid = data.get("id")
+    plan = load_plan()
+    plan["events"] = [e for e in plan.get("events", []) if e.get("id") != eid]
+    save_plan(plan)
+    return jsonify({"ok": True})
+
+
 # ─── СКЛАД ────────────────────────────────────────────────────────────────────
 
 from stock import parse_stock_report, build_stock_analytics
